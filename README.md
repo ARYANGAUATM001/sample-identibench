@@ -1,144 +1,226 @@
-# Nonlinear System Identification using IdentiBench
+# 🚀 System Identification Benchmark using IdentiBench
 
-##  Overview
+This project implements and benchmarks different models for **nonlinear system identification** using the **IdentiBench** framework.
 
-This project applies machine learning techniques to **nonlinear system identification** using the IdentiBench benchmarking framework. The goal is to model system dynamics from input-output time-series data and evaluate performance on standardized tasks.
-
----
-
-## About IdentiBench
-
-IdentiBench is a benchmarking framework for system identification that provides:
-
-* Standard datasets 
-* Unified training and evaluation pipeline
-* Consistent performance metrics
-
-This allows fair comparison of different models under identical conditions.
+The goal is to evaluate how different model architectures perform on standard benchmark datasets and to understand the trade-offs between **model complexity, accuracy, and efficiency**.
 
 ---
 
-##  Model Implementation
+## 📌 Overview
 
-### 🔹 Selective State Space Model (SSM)
+We compare two model types:
 
-* Custom-built model
-* Uses **input-dependent state transitions**
-* Inspired by modern architectures such as Mamba
+* **Selective State Space Model (SSM)**
+* **LSTM (Recurrent Neural Network)**
 
-This model aims to dynamically control how past information influences future predictions.
+These models are evaluated on well-known benchmarks:
 
----
-
-## 🎯 Objective
-
-* Learn nonlinear system dynamics
-* Predict system outputs from sequential inputs
-* Evaluate model performance using standardized benchmarks
+* Wiener–Hammerstein (WH)
+* Silverbox
 
 ---
 
-## 📂 Project Structure
+## ⚙️ Setup
 
-```
-project/
-│
-├── model/                 
-│   └── dss.py            # Selective State Space Model
-│
-├── trainer.py            # Training logic
-├── main.py               # Runs IdentiBench experiments
-├── results/              # Output CSV and logs
-└── README.md
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/ARYANGAUATM001/sample-identibench.git
+cd sample-identibench
 ```
 
----
+### 2. Install dependencies
 
-## 🚀 How to Run
-
-### Install dependencies
-
-```
+```bash
 pip install -r requirements.txt
 ```
 
-### Run benchmark
+---
 
-```
+## ▶️ Running the Benchmark
+
+Run the main script:
+
+```bash
 python main.py
 ```
 
----
+This will:
 
-## 📊 Results and Evaluation
-
-
-
-![Output](utils/output.png)
-
-The model was evaluated across multiple IdentiBench tasks. The output metrics summarize training time, inference time, and prediction accuracy.
-
-### 🔹 Key Results (Example Output)
-
-* **metric_score:** ~45.6
-* **cs_multisine_rmse:** ~49.3
-* **cs_arrow_full_rmse:** ~48.5
-* **cs_arrow_no_extrapolation_rmse:** ~38.97
+* Train both SSM and LSTM models
+* Run benchmarks multiple times
+* Output evaluation metrics in tabular format
 
 ---
 
+## 🧠 Models Implemented
 
+### 🔹 1. Selective State Space Model (SSM)
 
-###  Overall Performance
+* Lightweight and computationally efficient
+* Strong baseline for system identification tasks
+* Suitable for simpler or moderately nonlinear systems
 
-* The **metric_score (~45.6)** indicates moderate prediction accuracy
-* The model successfully captures key system dynamics
+### 🔹 2. LSTM (Long Short-Term Memory)
 
----
-
-###  Dataset-wise Behavior
-
-* **Multisine & Arrow datasets (~48–49 RMSE)**
-  → Moderate error suggests the model learns general patterns but struggles with complex variations
-
-* **No-extrapolation case (~38.97 RMSE)**
-  → Significantly lower error
-  → Indicates strong performance when predicting within known data distribution
+* Captures temporal dependencies in sequential data
+* More expressive and powerful for nonlinear dynamics
+* Higher computational cost
 
 ---
 
+## 📊 Results and Comparison
 
-
-### ✔ Stability
-
-* All benchmark runs completed successfully
-* No training instability observed
+Each benchmark is repeated **2 times** to ensure reliable results.
+Metrics are reported as **mean ± standard deviation**.
 
 ---
 
-### ✔ NaN Values
+### 🔢 Metrics Reported
 
-* Some metrics appear as `NaN`
-* This is expected in IdentiBench for certain configurations
-* It does **not indicate failure**
+* **metric_score** → overall benchmark score (lower is better)
+* **RMSE-based metrics**:
 
----
-
-
-
----
-
-## Key Takeaways
-
-* Selective SSM provides **adaptive temporal modeling**
-* Model performs better on **seen data than extrapolated scenarios**
-* IdentiBench enables **consistent and fair evaluation**
-  
+  * `cs_multisine_rmse`
+  * `cs_arrow_full_rmse`
+  * `cs_arrow_no_extrapolation_rmse`
+* **training_time_seconds**
+* **test_time_seconds**
 
 ---
 
-##  References
+## 🆚 Model Comparison
 
-* IdentiBench Benchmark Framework
-* PyTorch Documentation
+### 🔹 1. Prediction Accuracy
 
+* **LSTM**
+
+  * Achieves lower RMSE on most nonlinear benchmarks
+  * Captures temporal and nonlinear relationships effectively
+
+* **SSM**
+
+  * Performs well on simpler dynamics
+  * Limited capacity for highly nonlinear systems
+
+---
+
+### 🔹 2. Stability (Across Runs)
+
+* **SSM**
+
+  * Lower standard deviation
+  * More stable and consistent
+
+* **LSTM**
+
+  * Slightly higher variance due to stochastic training
+
+---
+
+### 🔹 3. Training Time
+
+* **SSM**
+
+  * Faster training
+  * Lower computational overhead
+
+* **LSTM**
+
+  * Slower due to sequential processing
+  * More parameters to optimize
+
+---
+
+### 🔹 4. Generalization
+
+* **LSTM**
+
+  * Better generalization on unseen sequences
+  * Handles long-term dependencies
+
+* **SSM**
+
+  * May underfit complex systems
+
+---
+
+## 📈 Key Takeaways
+
+* There is a clear trade-off:
+
+  * **SSM → efficiency and simplicity**
+  * **LSTM → accuracy and flexibility**
+
+* For **nonlinear system identification tasks**:
+
+  * LSTM is generally more suitable
+
+* For **resource-constrained or fast applications**:
+
+  * SSM is a strong baseline
+
+---
+
+## 🧠 Interpretation of Results
+
+* Lower **metric_score (mean)** → better performance
+* Lower **std** → more stable model
+* NaN values in some metrics may occur when:
+
+  * a benchmark does not include that metric
+  * the model struggles with extrapolation
+
+---
+
+## 📁 Project Structure
+
+```
+sample-identibench/
+│
+├── model/
+│   ├── dss.py              # SSM implementation
+│   ├── lstm.py             # LSTM model
+│   ├── lstm_wrapper.py     # LSTM utilities
+│   └── trainer.py          # Training logic
+│
+├── utils/
+│   ├── preprocessing.py
+│   └── seed.py
+│
+├── configs.py              # Hyperparameters
+├── main.py                 # Entry point
+├── README.md
+└── requirements.txt
+```
+
+---
+
+## 🎯 Conclusion
+
+This project demonstrates how different model architectures behave on system identification benchmarks.
+
+* **LSTM** improves predictive performance for complex nonlinear systems
+* **SSM** provides a fast and stable baseline
+
+The choice of model depends on:
+
+* system complexity
+* required accuracy
+* computational constraints
+
+---
+
+## 🙌 Acknowledgment
+
+* IdentiBench for providing the benchmarking framework
+* Standard system identification datasets used in evaluation
+
+---
+
+## 📌 Future Work
+
+* Add more models (e.g., MLP, Transformer-based models)
+* Perform hyperparameter tuning
+* Add visualization of predictions vs ground truth
+* Extend benchmarks to additional datasets
