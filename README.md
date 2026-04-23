@@ -89,6 +89,14 @@ Metrics are reported as **mean ± standard deviation**.
 
 ---
 
+## 📊 Results
+
+### 🔹 SSM Results
+![SSM Results](utils/SSM_output.png)
+
+### 🔹 LSTM Results
+![LSTM Results](utils/LSTM_output.png)
+
 ## 🆚 Model Comparison
 
 ### 🔹 1. Prediction Accuracy
