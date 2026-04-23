@@ -214,18 +214,6 @@ The choice of model depends on:
 * required accuracy
 * computational constraints
 
----
 
-## 🙌 Acknowledgment
 
-* IdentiBench for providing the benchmarking framework
-* Standard system identification datasets used in evaluation
 
----
-
-## 📌 Future Work
-
-* Add more models (e.g., MLP, Transformer-based models)
-* Perform hyperparameter tuning
-* Add visualization of predictions vs ground truth
-* Extend benchmarks to additional datasets
