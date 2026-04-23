@@ -72,6 +72,10 @@ python main.py
 
 ## 📊 Results and Evaluation
 
+
+
+![Output](utils/output.png)
+
 The model was evaluated across multiple IdentiBench tasks. The output metrics summarize training time, inference time, and prediction accuracy.
 
 ### 🔹 Key Results (Example Output)
