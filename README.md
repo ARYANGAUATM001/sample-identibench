@@ -72,18 +72,7 @@ Metrics are reported as **mean ± standard deviation**.
 
 ---
 
-### 🔢 Metrics Reported
 
-* **metric_score** → overall benchmark score (lower is better)
-* **RMSE-based metrics**:
-
-  * `cs_multisine_rmse`
-  * `cs_arrow_full_rmse`
-  * `cs_arrow_no_extrapolation_rmse`
-* **training_time_seconds**
-* **test_time_seconds**
-
----
 
 ## 📊 Results
 
