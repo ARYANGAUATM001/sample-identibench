@@ -2,3 +2,5 @@ identibench
 torch
 numpy
 pandas
+mamba-ssm
+causal-conv1d
