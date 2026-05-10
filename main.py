@@ -1,26 +1,42 @@
 import argparse
+import os
+
 import identibench as idb
-import torch
 import pandas as pd
+import torch
+
+from torch.amp import autocast
 
 from utils.seed import set_seed
 from utils.preprocessing import apply_init_window
+
 from configs import DEFAULT_CONFIG
 from trainer import train_model
 
 
-# ================= MODEL SELECTION =================
+# ============================================================
+# MODEL SELECTION
+# ============================================================
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument(
     "--model",
     type=str,
-    default="mamba1"
+    default="mamba1",
+    choices=[
+        "mamba1",
+        "mamba2",
+        "mamba3"
+    ]
 )
 
 args = parser.parse_args()
 
+
+# ============================================================
+# IMPORT MODEL
+# ============================================================
 
 if args.model == "mamba1":
 
@@ -34,24 +50,32 @@ elif args.model == "mamba3":
 
     from models.mamba3 import Model
 
-else:
 
-    raise ValueError(
-        "Invalid model name"
-    )
-
-
-# ================= BUILD MODEL =================
+# ============================================================
+# BUILD MODEL
+# ============================================================
 
 def build_model(context):
 
+    # --------------------------------------------------------
+    # Seed
+    # --------------------------------------------------------
+
     set_seed(context.seed)
 
-    device = (
+    # --------------------------------------------------------
+    # Device
+    # --------------------------------------------------------
+
+    device = torch.device(
         "cuda"
         if torch.cuda.is_available()
         else "cpu"
     )
+
+    # --------------------------------------------------------
+    # Spec
+    # --------------------------------------------------------
 
     spec = context.spec
 
@@ -61,13 +85,19 @@ def build_model(context):
         0
     )
 
+    # --------------------------------------------------------
+    # Config
+    # --------------------------------------------------------
+
     config = DEFAULT_CONFIG.copy()
 
     config.update(
         context.hyperparameters
     )
 
-    # ---------- LOAD DATA ----------
+    # --------------------------------------------------------
+    # Load data
+    # --------------------------------------------------------
 
     train_data = list(
         context.get_train_sequences()
@@ -77,12 +107,20 @@ def build_model(context):
         context.get_valid_sequences()
     )
 
-    # infer input dimension
+    # --------------------------------------------------------
+    # Infer input dimension safely
+    # --------------------------------------------------------
+
     u0, _, _ = train_data[0]
 
-    input_dim = u0.shape[1]
+    if u0.ndim == 1:
+        input_dim = 1
+    else:
+        input_dim = u0.shape[-1]
 
-    # ---------- PREPROCESS ----------
+    # --------------------------------------------------------
+    # Preprocess
+    # --------------------------------------------------------
 
     train_data = [
 
@@ -108,19 +146,36 @@ def build_model(context):
         in valid_data
     ]
 
-    # ---------- BUILD MODEL ----------
+    # --------------------------------------------------------
+    # Build model
+    # --------------------------------------------------------
 
     model = Model(
 
         input_dim=input_dim,
 
-        d_model=config["hidden_dim"],
+        d_model=config.get(
+            "hidden_dim",
+            128
+        ),
+
+        d_state=config.get(
+            "d_state",
+            64
+        ),
+
+        n_layers=config.get(
+            "n_layers",
+            6
+        ),
 
         num_classes=1
 
     ).to(device)
 
-    # ---------- TRAIN ----------
+    # --------------------------------------------------------
+    # Train
+    # --------------------------------------------------------
 
     model = train_model(
 
@@ -137,78 +192,139 @@ def build_model(context):
         model_name=args.model
     )
 
-    # ---------- PREDICTOR ----------
+    # --------------------------------------------------------
+    # Load BEST checkpoint
+    # --------------------------------------------------------
+
+    ckpt_path = (
+        f"outputs/{args.model}/best_model.pt"
+    )
+
+    if os.path.exists(ckpt_path):
+
+        checkpoint = torch.load(
+            ckpt_path,
+            map_location=device
+        )
+
+        model.load_state_dict(
+            checkpoint["model_state_dict"]
+        )
+
+    model.eval()
+
+    # ========================================================
+    # Predictor
+    # ========================================================
 
     def predictor(
-            u_test,
-            y_init=None
+        u_test,
+        y_init=None
     ):
 
         model.eval()
 
-        u_test = torch.tensor(
+        # ----------------------------------------------------
+        # Convert input
+        # ----------------------------------------------------
+
+        u_test = torch.as_tensor(
             u_test,
-            dtype=torch.float32
-        ).to(device)
+            dtype=torch.float32,
+            device=device
+        )
+
+        # ensure feature dimension
+        if u_test.ndim == 1:
+            u_test = u_test.unsqueeze(-1)
 
         with torch.no_grad():
 
-            # warmup sequence
-            if y_init is not None:
+            with autocast(
+                device_type=device.type,
+                enabled=device.type == "cuda"
+            ):
 
-                y_init = torch.tensor(
-                    y_init,
-                    dtype=torch.float32
-                ).to(device)
+                # ============================================
+                # Warmup handling
+                # ============================================
 
-                # dummy warmup inputs
-                u_warm = torch.zeros(
+                if y_init is not None:
 
-                    (
-                        len(y_init),
-                        u_test.shape[-1]
-                    ),
+                    y_init = torch.as_tensor(
+                        y_init,
+                        dtype=torch.float32,
+                        device=device
+                    )
 
-                    device=device
-                )
+                    warm_len = len(y_init)
 
-                u_full = torch.cat(
-                    [u_warm, u_test],
-                    dim=0
-                )
+                    # ----------------------------------------
+                    # Approximate warmup
+                    #
+                    # Since current models are:
+                    # y_t = f(u_1:t)
+                    #
+                    # and NOT autoregressive on y,
+                    # we warmup hidden states using
+                    # zero-input prefix.
+                    # ----------------------------------------
 
-                pred = model(
-                    u_full.unsqueeze(0)
-                )
+                    u_warm = torch.zeros(
 
-                pred = pred.squeeze(0)
+                        (
+                            warm_len,
+                            u_test.shape[-1]
+                        ),
 
-                y_pred = pred[
-                    len(y_init):
-                ]
+                        dtype=torch.float32,
+                        device=device
+                    )
 
-            else:
+                    u_full = torch.cat(
+                        [u_warm, u_test],
+                        dim=0
+                    )
 
-                pred = model(
-                    u_test.unsqueeze(0)
-                )
+                    pred = model(
+                        u_full.unsqueeze(0)
+                    )
 
-                y_pred = pred.squeeze(0)
+                    pred = pred.squeeze(0)
+
+                    y_pred = pred[warm_len:]
+
+                else:
+
+                    pred = model(
+                        u_test.unsqueeze(0)
+                    )
+
+                    y_pred = pred.squeeze(0)
 
         return (
+
             y_pred
             .detach()
+            .float()
             .cpu()
             .numpy()
             .reshape(-1, 1)
+
         )
 
     return predictor
 
 
-# ================= MAIN =================
+# ============================================================
+# MAIN
+# ============================================================
 
 if __name__ == "__main__":
+
+    # --------------------------------------------------------
+    # Benchmarks
+    # --------------------------------------------------------
 
     sim_specs = {
 
@@ -236,25 +352,42 @@ if __name__ == "__main__":
         **pred_specs
     }
 
+    # --------------------------------------------------------
+    # Run benchmarks
+    # --------------------------------------------------------
+
     results = idb.run_benchmarks(
 
         all_specs,
 
         build_model=build_model,
 
-        n_times=2,
+        # more stable statistics
+        n_times=5,
 
         hyperparameters={
 
             "hidden_dim": 128,
+
+            "d_state": 64,
+
+            "n_layers": 6,
 
             "epochs": 10,
 
             "lr": 1e-3,
 
             "seq_len": 100,
+
+            "weight_decay": 1e-2,
+
+            "compile": False,
         }
     )
+
+    # --------------------------------------------------------
+    # Aggregate
+    # --------------------------------------------------------
 
     agg = idb.aggregate_benchmark_results(
 
