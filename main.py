@@ -1,13 +1,15 @@
 import argparse
 import identibench as idb
 import torch
+import pandas as pd
 
 from utils.seed import set_seed
 from utils.preprocessing import apply_init_window
 from configs import DEFAULT_CONFIG
+from trainer import train_model
 
 
-# ---------------- MODEL SELECTION ----------------
+# ================= MODEL SELECTION =================
 
 parser = argparse.ArgumentParser()
 
@@ -21,131 +23,25 @@ args = parser.parse_args()
 
 
 if args.model == "mamba1":
+
     from models.mamba1 import Model
 
 elif args.model == "mamba2":
+
     from models.mamba2 import Model
 
 elif args.model == "mamba3":
+
     from models.mamba3 import Model
 
 else:
-    raise ValueError("Invalid model name")
 
-
-# ---------------- TRAINING ----------------
-
-def train_model(model, train_data, valid_data, config, device):
-
-    optimizer = torch.optim.Adam(
-        model.parameters(),
-        lr=config["lr"]
+    raise ValueError(
+        "Invalid model name"
     )
 
-    loss_fn = torch.nn.MSELoss()
 
-    seq_len = 100
-
-    for epoch in range(config["epochs"]):
-
-        # ---------- TRAIN ----------
-
-        model.train()
-
-        train_loss = 0.0
-
-        for (u, y, _) in train_data:
-
-            u = torch.tensor(
-                u,
-                dtype=torch.float32
-            )
-
-            y = torch.tensor(
-                y,
-                dtype=torch.float32
-            ).view(-1)
-
-            for i in range(0, len(u), seq_len):
-
-                u_batch = (
-                    u[i:i + seq_len]
-                    .unsqueeze(0)
-                    .to(device)
-                )
-
-                y_batch = (
-                    y[i:i + seq_len]
-                    .unsqueeze(0)
-                    .to(device)
-                )
-
-                optimizer.zero_grad()
-
-                pred = model(u_batch)
-
-                loss = loss_fn(pred, y_batch)
-
-                loss.backward()
-
-                torch.nn.utils.clip_grad_norm_(
-                    model.parameters(),
-                    1.0
-                )
-
-                optimizer.step()
-
-                train_loss += loss.item()
-
-        # ---------- VALID ----------
-
-        model.eval()
-
-        valid_loss = 0.0
-
-        with torch.no_grad():
-
-            for (u, y, _) in valid_data:
-
-                u = torch.tensor(
-                    u,
-                    dtype=torch.float32
-                )
-
-                y = torch.tensor(
-                    y,
-                    dtype=torch.float32
-                ).view(-1)
-
-                u = (
-                    u[:seq_len]
-                    .unsqueeze(0)
-                    .to(device)
-                )
-
-                y = (
-                    y[:seq_len]
-                    .unsqueeze(0)
-                    .to(device)
-                )
-
-                pred = model(u)
-
-                valid_loss += loss_fn(
-                    pred,
-                    y
-                ).item()
-
-        print(
-            f"Epoch {epoch + 1} | "
-            f"Train: {train_loss:.4f} | "
-            f"Valid: {valid_loss:.4f}"
-        )
-
-    return model
-
-
-# ---------------- BUILD MODEL ----------------
+# ================= BUILD MODEL =================
 
 def build_model(context):
 
@@ -171,6 +67,8 @@ def build_model(context):
         context.hyperparameters
     )
 
+    # ---------- LOAD DATA ----------
+
     train_data = list(
         context.get_train_sequences()
     )
@@ -179,6 +77,7 @@ def build_model(context):
         context.get_valid_sequences()
     )
 
+    # infer input dimension
     u0, _, _ = train_data[0]
 
     input_dim = u0.shape[1]
@@ -209,26 +108,41 @@ def build_model(context):
         in valid_data
     ]
 
-    # ---------- MODEL ----------
+    # ---------- BUILD MODEL ----------
 
     model = Model(
+
+        input_dim=input_dim,
+
         d_model=config["hidden_dim"],
+
         num_classes=1
+
     ).to(device)
 
     # ---------- TRAIN ----------
 
     model = train_model(
-        model,
-        train_data,
-        valid_data,
-        config,
-        device
+
+        model=model,
+
+        train_data=train_data,
+
+        valid_data=valid_data,
+
+        config=config,
+
+        device=device,
+
+        model_name=args.model
     )
 
     # ---------- PREDICTOR ----------
 
-    def predictor(u_test, y_init=None):
+    def predictor(
+            u_test,
+            y_init=None
+    ):
 
         model.eval()
 
@@ -239,6 +153,7 @@ def build_model(context):
 
         with torch.no_grad():
 
+            # warmup sequence
             if y_init is not None:
 
                 y_init = torch.tensor(
@@ -246,11 +161,14 @@ def build_model(context):
                     dtype=torch.float32
                 ).to(device)
 
+                # dummy warmup inputs
                 u_warm = torch.zeros(
+
                     (
                         len(y_init),
                         u_test.shape[-1]
                     ),
+
                     device=device
                 )
 
@@ -259,40 +177,58 @@ def build_model(context):
                     dim=0
                 )
 
-                y_full = model(
+                pred = model(
                     u_full.unsqueeze(0)
-                )[0]
+                )
 
-                y_pred = y_full[len(y_init):]
+                pred = pred.squeeze(0)
+
+                y_pred = pred[
+                    len(y_init):
+                ]
 
             else:
 
-                y_pred = model(
+                pred = model(
                     u_test.unsqueeze(0)
-                )[0]
+                )
 
-        return y_pred.reshape(-1, 1)
+                y_pred = pred.squeeze(0)
+
+        return (
+            y_pred
+            .detach()
+            .cpu()
+            .numpy()
+            .reshape(-1, 1)
+        )
 
     return predictor
 
 
-# ---------------- MAIN ----------------
+# ================= MAIN =================
 
 if __name__ == "__main__":
 
     sim_specs = {
 
         "WH_Sim":
-            idb.simulation_benchmarks["WH_Sim"],
+            idb.simulation_benchmarks[
+                "WH_Sim"
+            ],
 
         "Silverbox_Sim":
-            idb.simulation_benchmarks["Silverbox_Sim"],
+            idb.simulation_benchmarks[
+                "Silverbox_Sim"
+            ],
     }
 
     pred_specs = {
 
         "WH_Pred":
-            idb.prediction_benchmarks["WH_Pred"],
+            idb.prediction_benchmarks[
+                "WH_Pred"
+            ],
     }
 
     all_specs = {
@@ -310,21 +246,28 @@ if __name__ == "__main__":
 
         hyperparameters={
 
-            "hidden_dim": 16,
+            "hidden_dim": 128,
 
-            "epochs": 3,
+            "epochs": 10,
 
             "lr": 1e-3,
+
+            "seq_len": 100,
         }
     )
 
-    import pandas as pd
-
     agg = idb.aggregate_benchmark_results(
+
         results,
-        agg_funcs=["mean", "std"]
+
+        agg_funcs=[
+            "mean",
+            "std"
+        ]
     )
 
     df = pd.DataFrame(agg)
 
-    print(df.to_string(index=False))
+    print(
+        df.to_string(index=False)
+    )
