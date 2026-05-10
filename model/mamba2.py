@@ -1,30 +1,28 @@
 import torch
 import torch.nn as nn
-
 from mamba_ssm import Mamba
 
 
 class Mamba2Block(nn.Module):
 
     def __init__(
-            self,
-            d_model,
-            d_state
+        self,
+        d_model,
+        d_state=64,
+        expand=2,
+        d_conv=4,
     ):
-
         super().__init__()
 
-        # Pre-normalization improves stability
-        self.norm = nn.LayerNorm(
-            d_model
-        )
+        # Mamba-2 style prenorm
+        self.norm = nn.RMSNorm(d_model)
 
-        # Mamba block
+        # Mamba layer
         self.mamba = Mamba(
             d_model=d_model,
             d_state=d_state,
-            d_conv=4,
-            expand=2,
+            d_conv=d_conv,
+            expand=expand,
         )
 
     def forward(self, x):
@@ -35,7 +33,7 @@ class Mamba2Block(nn.Module):
 
         x = self.mamba(x)
 
-        # Residual connection
+        # residual connection
         x = x + residual
 
         return x
@@ -44,12 +42,13 @@ class Mamba2Block(nn.Module):
 class Model(nn.Module):
 
     def __init__(
-            self,
-            input_dim,
-            d_model=32,
-            num_classes=1
+        self,
+        input_dim,
+        d_model=128,
+        d_state=64,
+        n_layers=6,
+        num_classes=1,
     ):
-
         super().__init__()
 
         # Input projection
@@ -58,32 +57,23 @@ class Model(nn.Module):
             d_model
         )
 
-        # Deeper stacked architecture
-        # inspired by Mamba-2 scaling
-        self.layers = nn.Sequential(
-
-            Mamba2Block(
-                d_model=d_model,
-                d_state=16
-            ),
-
-            Mamba2Block(
-                d_model=d_model,
-                d_state=32
-            ),
-
-            Mamba2Block(
-                d_model=d_model,
-                d_state=64
-            ),
+        # Stacked Mamba blocks
+        self.layers = nn.ModuleList(
+            [
+                Mamba2Block(
+                    d_model=d_model,
+                    d_state=d_state,
+                )
+                for _ in range(n_layers)
+            ]
         )
 
         # Final normalization
-        self.final_norm = nn.LayerNorm(
+        self.final_norm = nn.RMSNorm(
             d_model
         )
 
-        # Prediction head
+        # Output head
         self.head = nn.Linear(
             d_model,
             num_classes
@@ -91,16 +81,20 @@ class Model(nn.Module):
 
     def forward(self, x):
 
-        # (B, L, input_dim)
+        # x: (B, L, input_dim)
+
         x = self.input_proj(x)
 
-        # (B, L, d_model)
-        x = self.layers(x)
+        # stacked Mamba layers
+        for layer in self.layers:
+            x = layer(x)
 
         x = self.final_norm(x)
 
-        # (B, L, 1)
         x = self.head(x)
 
-        # (B, L)
-        return x.squeeze(-1)
+        # only squeeze if binary/regression
+        if x.shape[-1] == 1:
+            x = x.squeeze(-1)
+
+        return x
