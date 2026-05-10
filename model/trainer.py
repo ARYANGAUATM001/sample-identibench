@@ -1,5 +1,6 @@
 import os
 import torch
+from torch.cuda.amp import autocast, GradScaler
 
 
 def train_model(
@@ -13,12 +14,14 @@ def train_model(
 
     model = model.to(device)
 
-    optimizer = torch.optim.Adam(
+    optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=config["lr"]
     )
 
     loss_fn = torch.nn.MSELoss()
+
+    scaler = GradScaler()
 
     seq_len = config.get("seq_len", 100)
 
@@ -35,26 +38,22 @@ def train_model(
         model.train()
 
         train_loss = 0.0
+        train_steps = 0
 
         for (u, y, _) in train_data:
 
-            u = torch.tensor(
-                u,
-                dtype=torch.float32
-            )
+            # Assume dataset already returns tensors
+            u = u.float()
+            y = y.float()
 
-            y = torch.tensor(
-                y,
-                dtype=torch.float32
-            )
-
-            # FIX TARGET SHAPE
+            # Fix target shape
             if y.ndim == 3:
                 y = y.squeeze(-1)
 
-            if y.ndim == 2:
-                y = y.squeeze(1)
+            if y.ndim == 2 and y.shape[0] == 1:
+                y = y.squeeze(0)
 
+            # Chunk long sequences
             for i in range(0, len(u), seq_len):
 
                 u_batch = (
@@ -69,89 +68,96 @@ def train_model(
                     .to(device, non_blocking=True)
                 )
 
-                optimizer.zero_grad()
+                optimizer.zero_grad(set_to_none=True)
 
-                pred = model(u_batch)
+                with autocast():
 
-                # FIX OUTPUT SHAPE
-                pred = pred.squeeze(-1)
+                    pred = model(u_batch)
 
-                loss = loss_fn(
-                    pred,
-                    y_batch
-                )
+                    # Safe squeeze
+                    if pred.ndim == 3:
+                        pred = pred.squeeze(-1)
+
+                    loss = loss_fn(
+                        pred,
+                        y_batch
+                    )
 
                 if torch.isnan(loss):
                     print("NaN loss detected")
                     continue
 
-                loss.backward()
+                scaler.scale(loss).backward()
+
+                scaler.unscale_(optimizer)
 
                 torch.nn.utils.clip_grad_norm_(
                     model.parameters(),
                     max_norm=1.0
                 )
 
-                optimizer.step()
+                scaler.step(optimizer)
+
+                scaler.update()
 
                 train_loss += loss.item()
+                train_steps += 1
+
+        # Proper average
+        train_loss /= max(train_steps, 1)
 
         # ================= VALID =================
 
         model.eval()
 
         valid_loss = 0.0
+        valid_steps = 0
 
         with torch.no_grad():
 
             for (u, y, _) in valid_data:
 
-                u = torch.tensor(
-                    u,
-                    dtype=torch.float32
-                )
+                u = u.float()
+                y = y.float()
 
-                y = torch.tensor(
-                    y,
-                    dtype=torch.float32
-                )
-
-                # FIX TARGET SHAPE
                 if y.ndim == 3:
                     y = y.squeeze(-1)
 
-                if y.ndim == 2:
-                    y = y.squeeze(1)
+                if y.ndim == 2 and y.shape[0] == 1:
+                    y = y.squeeze(0)
 
-                u = (
-                    u[:seq_len]
-                    .unsqueeze(0)
-                    .to(device, non_blocking=True)
-                )
+                # Validate ALL chunks
+                for i in range(0, len(u), seq_len):
 
-                y = (
-                    y[:seq_len]
-                    .unsqueeze(0)
-                    .to(device, non_blocking=True)
-                )
+                    u_batch = (
+                        u[i:i + seq_len]
+                        .unsqueeze(0)
+                        .to(device, non_blocking=True)
+                    )
 
-                pred = model(u)
+                    y_batch = (
+                        y[i:i + seq_len]
+                        .unsqueeze(0)
+                        .to(device, non_blocking=True)
+                    )
 
-                # FIX OUTPUT SHAPE
-                pred = pred.squeeze(-1)
+                    with autocast():
 
-                loss = loss_fn(
-                    pred,
-                    y
-                )
+                        pred = model(u_batch)
 
-                valid_loss += loss.item()
+                        if pred.ndim == 3:
+                            pred = pred.squeeze(-1)
 
-        # ================= AVERAGE LOSSES =================
+                        loss = loss_fn(
+                            pred,
+                            y_batch
+                        )
 
-        train_loss /= len(train_data)
+                    valid_loss += loss.item()
+                    valid_steps += 1
 
-        valid_loss /= len(valid_data)
+        # Proper average
+        valid_loss /= max(valid_steps, 1)
 
         # ================= SAVE BEST =================
 
@@ -161,18 +167,18 @@ def train_model(
 
             torch.save(
                 {
+                    "epoch": epoch,
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
                     "valid_loss": valid_loss,
-                    "epoch": epoch,
                 },
                 f"{save_dir}/best_model.pt"
             )
 
         print(
             f"Epoch {epoch + 1} | "
-            f"Train Loss: {train_loss:.4f} | "
-            f"Valid Loss: {valid_loss:.4f}"
+            f"Train Loss: {train_loss:.6f} | "
+            f"Valid Loss: {valid_loss:.6f}"
         )
 
     return model
