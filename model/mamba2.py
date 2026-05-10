@@ -1,7 +1,13 @@
 import torch
 import torch.nn as nn
-from mamba_ssm import Mamba
 
+# TRUE Mamba-2 layer
+from mamba_ssm.modules.mamba2 import Mamba2
+
+
+# ============================================================
+# Mamba-2 Block
+# ============================================================
 
 class Mamba2Block(nn.Module):
 
@@ -11,33 +17,56 @@ class Mamba2Block(nn.Module):
         d_state=64,
         expand=2,
         d_conv=4,
+        dropout=0.0,
     ):
         super().__init__()
 
-        # Mamba-2 style prenorm
+        # ----------------------------------------------------
+        # PreNorm (official style)
+        # ----------------------------------------------------
+
         self.norm = nn.RMSNorm(d_model)
 
-        # Mamba layer
-        self.mamba = Mamba(
+        # ----------------------------------------------------
+        # True Mamba-2 SSD layer
+        # ----------------------------------------------------
+
+        self.mamba = Mamba2(
             d_model=d_model,
             d_state=d_state,
             d_conv=d_conv,
             expand=expand,
         )
 
+        # ----------------------------------------------------
+        # Optional dropout
+        # ----------------------------------------------------
+
+        self.dropout = nn.Dropout(dropout)
+
     def forward(self, x):
 
+        # residual
         residual = x
 
+        # prenorm
         x = self.norm(x)
 
+        # Mamba-2
         x = self.mamba(x)
+
+        # dropout
+        x = self.dropout(x)
 
         # residual connection
         x = x + residual
 
         return x
 
+
+# ============================================================
+# Full Model
+# ============================================================
 
 class Model(nn.Module):
 
@@ -47,33 +76,51 @@ class Model(nn.Module):
         d_model=128,
         d_state=64,
         n_layers=6,
+        expand=2,
+        d_conv=4,
         num_classes=1,
+        dropout=0.0,
     ):
         super().__init__()
 
+        # ----------------------------------------------------
         # Input projection
+        # ----------------------------------------------------
+
         self.input_proj = nn.Linear(
             input_dim,
             d_model
         )
 
-        # Stacked Mamba blocks
+        # ----------------------------------------------------
+        # Stacked Mamba-2 blocks
+        # ----------------------------------------------------
+
         self.layers = nn.ModuleList(
             [
                 Mamba2Block(
                     d_model=d_model,
                     d_state=d_state,
+                    expand=expand,
+                    d_conv=d_conv,
+                    dropout=dropout,
                 )
                 for _ in range(n_layers)
             ]
         )
 
+        # ----------------------------------------------------
         # Final normalization
+        # ----------------------------------------------------
+
         self.final_norm = nn.RMSNorm(
             d_model
         )
 
+        # ----------------------------------------------------
         # Output head
+        # ----------------------------------------------------
+
         self.head = nn.Linear(
             d_model,
             num_classes
@@ -81,19 +128,25 @@ class Model(nn.Module):
 
     def forward(self, x):
 
-        # x: (B, L, input_dim)
+        """
+        x shape:
+            (B, L, input_dim)
+        """
 
+        # input projection
         x = self.input_proj(x)
 
-        # stacked Mamba layers
+        # stacked Mamba-2 layers
         for layer in self.layers:
             x = layer(x)
 
+        # final norm
         x = self.final_norm(x)
 
+        # output projection
         x = self.head(x)
 
-        # only squeeze if binary/regression
+        # safe squeeze for regression/binary
         if x.shape[-1] == 1:
             x = x.squeeze(-1)
 
