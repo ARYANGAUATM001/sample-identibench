@@ -404,7 +404,7 @@ class Model(nn.Module):
 
     def __init__(
         self,
-        input_dim,
+        input_dim=1,
         d_model=256,
         d_state=128,
         n_layers=8,
