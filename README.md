@@ -103,124 +103,121 @@ Metrics are reported as **mean ± standard deviation**.
 
 ## 🆚 Model Comparison
 
-### 🔹 1. Prediction Accuracy
 
-* **LSTM**
+# 🆚 Model Comparison
 
-  * Achieves lower RMSE on most nonlinear benchmarks
-  * Captures temporal and nonlinear relationships effectively
+## 1. Prediction Accuracy
 
-* **SSM**
+### Mamba2
 
-  * Performs well on simpler dynamics
-  * Limited capacity for highly nonlinear systems
+- Achieved the best overall benchmark performance
+- Lower RMSE across nonlinear system benchmarks
+- Better temporal sequence modeling capability
+
+### Mamba1
+
+- Reliable baseline performance
+- Performs well on moderate nonlinear dynamics
+- Lower complexity and easier optimization
+
+### Mamba3
+
+- Higher model capacity
+- Handles more complex representations
+- Increased benchmark error in current experiments
+
 
 ---
 
-### 🔹 2. Stability (Across Runs)
+## 2. Stability Across Runs
 
-* **SSM**
+### Mamba1
 
-  * Lower standard deviation
-  * More stable and consistent
+- Most stable training behavior
+- Lower variance across repeated experiments
+- Consistent benchmark outputs
 
-* **LSTM**
+### Mamba2
 
-  * Slightly higher variance due to stochastic training
+- Good repeatability
+- Stable convergence during training
 
----
+### Mamba3
 
-### 🔹 3. Training Time
-
-* **SSM**
-
-  * Faster training
-  * Lower computational overhead
-
-* **LSTM**
-
-  * Slower due to sequential processing
-  * More parameters to optimize
+- Higher variance due to increased model complexity
+- More sensitive to hyperparameter settings
 
 ---
 
-### 🔹 4. Generalization
+## 3. Training Efficiency
 
-* **LSTM**
+### Mamba2
 
-  * Better generalization on unseen sequences
-  * Handles long-term dependencies
+- Fastest benchmark execution
+- Lower inference overhead
+- Efficient training-performance tradeoff
 
-* **SSM**
+### Mamba1
 
-  * May underfit complex systems
+- Moderate computational cost
+- Good efficiency for baseline experiments
 
----
+### Mamba3
 
-## 📈 Key Takeaways
-
-* There is a clear trade-off:
-
-  * **SSM → efficiency and simplicity**
-  * **LSTM → accuracy and flexibility**
-
-* For **nonlinear system identification tasks**:
-
-  * LSTM is generally more suitable
-
-* For **resource-constrained or fast applications**:
-
-  * SSM is a strong baseline
+- Highest computational overhead
+- Longer training duration
+- Increased resource consumption
 
 ---
 
-## 🧠 Interpretation of Results
 
-* Lower **metric_score (mean)** → better performance
-* Lower **std** → more stable model
-* NaN values in some metrics may occur when:
 
-  * a benchmark does not include that metric
-  * the model struggles with extrapolation
+# 📌 Key Takeaways
+
+- Mamba2 achieved the best overall balance between:
+  - prediction accuracy
+  - training efficiency
+  - stability
+
+- Mamba1 provides:
+  - strong baseline performance
+  - faster experimentation
+  - lower computational requirements
+
+- Mamba3 demonstrates:
+  - larger representational capacity
+  - higher computational complexity
+  - need for further optimization
 
 ---
 
-## 📁 Project Structure
+# 🧠 Interpretation of Results
 
-```
-sample-identibench/
-│
-├── model/
-│   ├── dss.py              # SSM implementation
-│   ├── lstm.py             # LSTM model
-│   ├── lstm_wrapper.py     
-│   └── trainer.py          
-│
-├── utils/
-│   ├── preprocessing.py
-│   └── seed.py
-│
-├── configs.py              
-├── main.py                 
-├── README.md
-└── requirements.txt
-```
+- Lower `metric_score` indicates better benchmark performance
+- Lower RMSE values correspond to improved prediction quality
+- Smaller standard deviation indicates more stable training behavior
 
+NaN values may appear because:
 
+- Certain datasets do not compute specific metrics
+- Some extrapolation benchmarks may not apply to all runs
 
-## 🎯 Conclusion
+---
 
-This project demonstrates how different model architectures behave on system identification benchmarks.
+# 🎯 Conclusion
 
-* **LSTM** improves predictive performance for complex nonlinear systems
-* **SSM** provides a fast and stable baseline
+This project demonstrates the effectiveness of Mamba-based architectures for nonlinear system identification using the IdentiBench framework.
 
-The choice of model depends on:
+Key observations:
 
-* system complexity
-* required accuracy
-* computational constraints
+- Mamba2 produced the strongest practical benchmark performance
+- Mamba1 serves as an efficient lightweight baseline
+- Mamba3 offers higher modeling capacity but requires additional optimization
 
+The ideal model choice depends on:
 
+- available computational resources
+- required prediction accuracy
+- target system complexity
 
 
