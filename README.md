@@ -17,7 +17,6 @@ We compare the following models:
 These models are evaluated on standard nonlinear system identification benchmarks using repeated experiments.
 
 ---
-
 # ⚙️ Setup
 
 ## 1. Clone the repository
@@ -25,23 +24,25 @@ These models are evaluated on standard nonlinear system identification benchmark
 ```bash
 git clone https://github.com/ARYANGAUATM001/sample-identibench.git
 cd sample-identibench
+```
 
-### 2. Install dependencies
+## 2. Install dependencies
 
-
+```bash
 pip install -r requirements.txt
-
+```
 
 ---
 
-## ▶️ Running the Benchmark
+# ▶️ Running the Benchmark
 
 Run the main script:
 
+```bash
 python main.py --model mamba1
 python main.py --model mamba2
 python main.py --model mamba3
-
+```
 
 This will:
 
@@ -49,6 +50,7 @@ This will:
 2. Run IdentiBench benchmarks
 3. Repeat experiments multiple times
 4. Output evaluation metrics
+
 ---
 
 ## 🧠 Models Implemented
