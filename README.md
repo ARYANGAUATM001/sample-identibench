@@ -1,29 +1,30 @@
-#  System Identification Benchmark using IdentiBench
+# System Identification Benchmark using IdentiBench
 
-This project implements and benchmarks different models for **nonlinear system identification** using the **IdentiBench** framework.
+This project benchmarks multiple Mamba-based architectures for nonlinear system identification using the IdentiBench framework.
 
-The goal is to evaluate how different model architectures perform on standard benchmark datasets and to understand the trade-offs between **model complexity, accuracy, and efficiency**.
-
-
-## 📌 Overview
-
-We compare two model types:
-
-* **Selective State Space Model (SSM)**
-* **LSTM (Recurrent Neural Network)**
-
-These models are evaluated on well-known benchmarks.
+The goal is to compare training efficiency, prediction accuracy, stability, and generalization performance across different Mamba variants.
 
 ---
 
-## ⚙️ Setup
+# 📌 Overview
 
-### 1. Clone the repository
+We compare the following models:
+
+- Mamba1
+- Mamba2
+- Mamba3
+
+These models are evaluated on standard nonlinear system identification benchmarks using repeated experiments.
+
+---
+
+# ⚙️ Setup
+
+## 1. Clone the repository
 
 ```bash
 git clone https://github.com/ARYANGAUATM001/sample-identibench.git
 cd sample-identibench
-```
 
 ### 2. Install dependencies
 
@@ -38,30 +39,44 @@ pip install -r requirements.txt
 Run the main script:
 
 ```bash
-python main.py
+python main.py --model mamba1
+python main.py --model mamba2
+python main.py --model mamba3
 ```
 
 This will:
 
-* Train both SSM and LSTM models
-* Run benchmarks multiple times
-* Output evaluation metrics in tabular format
-
+1. Train the selected model
+2. Run IdentiBench benchmarks
+3. Repeat experiments multiple times
+4. Output evaluation metrics
 ---
 
 ## 🧠 Models Implemented
 
-### 🔹 1. Selective State Space Model (SSM)
+### 🔹 1. Mamba1
 
-* Lightweight and computationally efficient
-* Strong baseline for system identification tasks
-* Suitable for simpler or moderately nonlinear systems
+1. Lightweight baseline implementation
+2. Fast training
+3. Stable across repetitions
+4. Efficient for simpler dynamics
 
-### 🔹 2. LSTM (Long Short-Term Memory)
 
-* Captures temporal dependencies in sequential data
-* More expressive and powerful for nonlinear dynamics
-* Higher computational cost
+
+### 🔹 2. Mamba2
+
+1. Improved optimization and representation
+2. Better accuracy on nonlinear systems
+3. Lower benchmark error
+4. Faster inference
+
+
+###  3. Mamba3
+
+1. Larger and more expressive variant
+2. Higher computational cost
+3. Stronger modeling capability
+4. More complex dynamics handling
 
 ---
 
