@@ -92,13 +92,13 @@ Metrics are reported as **mean ± standard deviation**.
 ## 📊 Results
 
 ### 🔹 Mamba Results
-![Mamba Results](utils/SSM_output1.png)
+![Mamba Results](utils/output1.png)
 
 ### 🔹 Mamba2 Results
-![Mamba2 Results](utils/LSTM_output2.png)
+![Mamba2 Results](utils/output2.png)
 
 ###  Mamba3
-![Mamba3 Results](utils/LSTM_output3.png)
+![Mamba3 Results](utils/output3.png)
 
 
 ## 🆚 Model Comparison
