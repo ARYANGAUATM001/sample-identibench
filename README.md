@@ -38,11 +38,10 @@ pip install -r requirements.txt
 
 Run the main script:
 
-```bash
 python main.py --model mamba1
 python main.py --model mamba2
 python main.py --model mamba3
-```
+
 
 This will:
 
