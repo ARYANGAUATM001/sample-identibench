@@ -115,7 +115,7 @@ Metrics are reported as **mean ± standard deviation**.
 - Lower RMSE across nonlinear system benchmarks
 - Better temporal sequence modeling capability
 
-### Mamba1
+### Mamba
 
 - Reliable baseline performance
 - Performs well on moderate nonlinear dynamics
