@@ -55,7 +55,7 @@ This will:
 
 ## 🧠 Models Implemented
 
-### 🔹 1. Mamba1
+### 🔹 1. Mamba
 
 1. Lightweight baseline implementation
 2. Fast training
