@@ -22,26 +22,25 @@ def rotate_half(x):
 
 # ============================================================
 # Data-dependent Rotary Embedding
-# (Mamba-3 complex SSM approximation)
 # ============================================================
 
 class DataDependentRoPE(nn.Module):
 
-    def __init__(self, d_model):
+    def __init__(self, dim):
 
         super().__init__()
 
-        assert d_model % 2 == 0
+        assert dim % 2 == 0
 
         self.theta_proj = nn.Linear(
-            d_model,
-            d_model // 2
+            dim,
+            dim // 2
         )
 
     def forward(self, x):
 
         """
-        x: (B, L, D)
+        x: (..., D)
         """
 
         theta = self.theta_proj(x)
@@ -68,7 +67,7 @@ class DataDependentRoPE(nn.Module):
 
 
 # ============================================================
-# BC / QK Normalization
+# BCNorm / QKNorm
 # ============================================================
 
 class BCNorm(nn.Module):
@@ -116,12 +115,7 @@ class SwiGLU(nn.Module):
 
 
 # ============================================================
-# Mamba-3 SSM Layer
-# Implements:
-# - exponential-trapezoidal recurrence
-# - data-dependent rotations
-# - BCNorm
-# - learnable B/C biases
+# Mamba-3 SSM
 # ============================================================
 
 class Mamba3SSM(nn.Module):
@@ -134,12 +128,14 @@ class Mamba3SSM(nn.Module):
 
         super().__init__()
 
+        assert d_state % 2 == 0
+
         self.d_model = d_model
         self.d_state = d_state
 
-        # ----------------------------------
-        # projections
-        # ----------------------------------
+        # ----------------------------------------------------
+        # Dynamic parameter projections
+        # ----------------------------------------------------
 
         self.dt_proj = nn.Linear(
             d_model,
@@ -156,6 +152,10 @@ class Mamba3SSM(nn.Module):
             1
         )
 
+        # ----------------------------------------------------
+        # SSM projections
+        # ----------------------------------------------------
+
         self.B_proj = nn.Linear(
             d_model,
             d_state
@@ -166,16 +166,23 @@ class Mamba3SSM(nn.Module):
             d_state
         )
 
-        # ----------------------------------
-        # BC normalization
-        # ----------------------------------
+        # IMPORTANT FIX:
+        # learned input projection
+        self.x_proj = nn.Linear(
+            d_model,
+            d_state
+        )
+
+        # ----------------------------------------------------
+        # BCNorm
+        # ----------------------------------------------------
 
         self.b_norm = BCNorm(d_state)
         self.c_norm = BCNorm(d_state)
 
-        # ----------------------------------
-        # learnable biases
-        # ----------------------------------
+        # ----------------------------------------------------
+        # Learnable biases
+        # ----------------------------------------------------
 
         self.B_bias = nn.Parameter(
             torch.zeros(d_state)
@@ -185,10 +192,9 @@ class Mamba3SSM(nn.Module):
             torch.zeros(d_state)
         )
 
-        # ----------------------------------
-        # complex-state approximation
-        # using data-dependent rotary
-        # ----------------------------------
+        # ----------------------------------------------------
+        # Data-dependent rotary embeddings
+        # ----------------------------------------------------
 
         self.rope_B = DataDependentRoPE(
             d_state
@@ -198,9 +204,9 @@ class Mamba3SSM(nn.Module):
             d_state
         )
 
-        # ----------------------------------
-        # output projection
-        # ----------------------------------
+        # ----------------------------------------------------
+        # Output projection
+        # ----------------------------------------------------
 
         self.out_proj = nn.Linear(
             d_state,
@@ -210,14 +216,15 @@ class Mamba3SSM(nn.Module):
     def forward(self, x):
 
         """
-        x: (B, L, D)
+        x:
+            (B, L, D)
         """
 
         B, L, D = x.shape
 
-        # ----------------------------------
-        # state
-        # ----------------------------------
+        # ----------------------------------------------------
+        # Initial hidden state
+        # ----------------------------------------------------
 
         h = torch.zeros(
             B,
@@ -226,8 +233,6 @@ class Mamba3SSM(nn.Module):
             dtype=x.dtype
         )
 
-        outputs = []
-
         prev_Bx = torch.zeros(
             B,
             self.d_state,
@@ -235,13 +240,19 @@ class Mamba3SSM(nn.Module):
             dtype=x.dtype
         )
 
+        outputs = []
+
+        # ----------------------------------------------------
+        # Sequential recurrence
+        # ----------------------------------------------------
+
         for t in range(L):
 
             xt = x[:, t]
 
-            # ----------------------------------
-            # dynamic parameters
-            # ----------------------------------
+            # ------------------------------------------------
+            # Dynamic SSM parameters
+            # ------------------------------------------------
 
             dt = F.softplus(
                 self.dt_proj(xt)
@@ -255,11 +266,17 @@ class Mamba3SSM(nn.Module):
                 self.lambda_proj(xt)
             )
 
-            # ----------------------------------
-            # exponential-trapezoidal coeffs
-            # ----------------------------------
+            # ------------------------------------------------
+            # Exponential-trapezoidal coefficients
+            # ------------------------------------------------
 
-            alpha = torch.exp(dt * A)
+            alpha = torch.exp(
+                torch.clamp(
+                    dt * A,
+                    min=-20.0,
+                    max=5.0
+                )
+            )
 
             beta = (
                 (1.0 - lam)
@@ -269,57 +286,51 @@ class Mamba3SSM(nn.Module):
 
             gamma = lam * dt
 
-            # ----------------------------------
-            # B / C projections
-            # ----------------------------------
+            # ------------------------------------------------
+            # Projections
+            # ------------------------------------------------
 
             B_t = self.B_proj(xt)
             C_t = self.C_proj(xt)
 
-            # ----------------------------------
+            # learned input projection
+            x_proj = self.x_proj(xt)
+
+            # ------------------------------------------------
             # BCNorm
-            # ----------------------------------
+            # ------------------------------------------------
 
             B_t = self.b_norm(B_t)
             C_t = self.c_norm(C_t)
 
-            # ----------------------------------
-            # biases
-            # ----------------------------------
+            # ------------------------------------------------
+            # Learnable biases
+            # ------------------------------------------------
 
             B_t = B_t + self.B_bias
             C_t = C_t + self.C_bias
 
-            # ----------------------------------
-            # complex SSM approximation
-            # with data-dependent rotations
-            # ----------------------------------
+            # ------------------------------------------------
+            # Data-dependent RoPE
+            # ------------------------------------------------
 
-            B_t = self.rope_B(
-                B_t.unsqueeze(1)
-            ).squeeze(1)
+            B_t = self.rope_B(B_t)
+            C_t = self.rope_C(C_t)
 
-            C_t = self.rope_C(
-                C_t.unsqueeze(1)
-            ).squeeze(1)
+            # ------------------------------------------------
+            # State input
+            # ------------------------------------------------
 
-            # ----------------------------------
-            # state input
-            # ----------------------------------
+            Bx = B_t * x_proj
 
-            Bx = B_t * xt.mean(
-                dim=-1,
-                keepdim=True
-            )
-
-            # ----------------------------------
+            # ------------------------------------------------
             # Mamba-3 recurrence
             #
             # h_t =
             #   alpha * h_{t-1}
             # + beta  * B_{t-1}x_{t-1}
             # + gamma * B_t x_t
-            # ----------------------------------
+            # ------------------------------------------------
 
             h = (
                 alpha * h
@@ -327,7 +338,10 @@ class Mamba3SSM(nn.Module):
                 + gamma * Bx
             )
 
-            # output
+            # ------------------------------------------------
+            # Output
+            # ------------------------------------------------
+
             y = h * C_t
 
             y = self.out_proj(y)
@@ -343,7 +357,7 @@ class Mamba3SSM(nn.Module):
 
 
 # ============================================================
-# Full Mamba-3 Block
+# Mamba-3 Block
 # ============================================================
 
 class Mamba3Block(nn.Module):
@@ -377,6 +391,10 @@ class Mamba3Block(nn.Module):
 
     def forward(self, x):
 
+        # ----------------------------------------------------
+        # SSM block
+        # ----------------------------------------------------
+
         residual = x
 
         x = self.norm1(x)
@@ -384,6 +402,10 @@ class Mamba3Block(nn.Module):
         x = self.ssm(x)
 
         x = x + residual
+
+        # ----------------------------------------------------
+        # FFN block
+        # ----------------------------------------------------
 
         residual = x
 
@@ -408,29 +430,47 @@ class Model(nn.Module):
         d_model=256,
         d_state=128,
         n_layers=8,
+        expand=4,
         num_classes=1,
     ):
 
         super().__init__()
+
+        # ----------------------------------------------------
+        # Input projection
+        # ----------------------------------------------------
 
         self.input_proj = nn.Linear(
             input_dim,
             d_model
         )
 
+        # ----------------------------------------------------
+        # Mamba-3 layers
+        # ----------------------------------------------------
+
         self.layers = nn.ModuleList(
             [
                 Mamba3Block(
                     d_model=d_model,
                     d_state=d_state,
+                    expand=expand,
                 )
                 for _ in range(n_layers)
             ]
         )
 
+        # ----------------------------------------------------
+        # Final normalization
+        # ----------------------------------------------------
+
         self.final_norm = nn.RMSNorm(
             d_model
         )
+
+        # ----------------------------------------------------
+        # Output head
+        # ----------------------------------------------------
 
         self.head = nn.Linear(
             d_model,
@@ -438,6 +478,11 @@ class Model(nn.Module):
         )
 
     def forward(self, x):
+
+        """
+        x:
+            (B, L, input_dim)
+        """
 
         x = self.input_proj(x)
 
