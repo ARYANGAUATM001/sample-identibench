@@ -10,7 +10,7 @@ The goal is to compare training efficiency, prediction accuracy, stability, and 
 
 We compare the following models:
 
-- Mamba1
+- Mamba
 - Mamba2
 - Mamba3
 
@@ -28,9 +28,9 @@ cd sample-identibench
 
 ### 2. Install dependencies
 
-```bash
+
 pip install -r requirements.txt
-```
+
 
 ---
 
