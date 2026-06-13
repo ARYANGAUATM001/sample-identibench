@@ -213,6 +213,31 @@ class Mamba3SSM(nn.Module):
             d_model
         )
 
+        # ----------------------------------------------------
+        # SSM initialization (stability)
+        #
+        # Start with a small discretization step dt so the state
+        # transition begins near identity and gradients don't
+        # explode (the NaNs the model produced were exploding
+        # gradients). softplus(-3) ~ 0.05.
+        # Keep the data-dependent gates near their bias at init by
+        # shrinking their weights.
+        # ----------------------------------------------------
+
+        nn.init.zeros_(self.dt_proj.weight)
+        nn.init.constant_(self.dt_proj.bias, -3.0)
+
+        nn.init.zeros_(self.A_proj.weight)
+        nn.init.constant_(self.A_proj.bias, 0.0)
+
+        nn.init.zeros_(self.lambda_proj.weight)
+        nn.init.zeros_(self.lambda_proj.bias)
+
+        # small output so initial predictions stay near zero
+        # (targets are standardized, mean 0)
+        nn.init.normal_(self.out_proj.weight, std=1e-3)
+        nn.init.zeros_(self.out_proj.bias)
+
     def forward(self, x):
 
         """

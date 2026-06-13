@@ -1,31 +1,30 @@
 import os
+import random
+
 import numpy as np
 import torch
 import torch.nn as nn
 
-from torch.amp import autocast, GradScaler
+
+def _seq_tensors(data, device):
+    """List of (u, y) tensors on device. u: (L, D), y: (L,)."""
+    out = []
+    for (u, y, _) in data:
+        ut = torch.as_tensor(np.asarray(u), dtype=torch.float32, device=device)
+        yt = torch.as_tensor(np.asarray(y), dtype=torch.float32, device=device)
+        if ut.ndim == 1:
+            ut = ut.unsqueeze(-1)
+        yt = yt.reshape(-1)
+        out.append((ut, yt))
+    return out
 
 
-def _to_batched(u, y):
-    """Convert a single (u, y) numpy/tensor pair to batched tensors.
-
-    Returns u of shape (1, L, D) and y of shape (1, L).
-    """
-
-    u = torch.as_tensor(np.asarray(u), dtype=torch.float32)
-    y = torch.as_tensor(np.asarray(y), dtype=torch.float32)
-
-    # (L,) -> (L, 1)
-    if u.ndim == 1:
-        u = u.unsqueeze(-1)
-
-    # (L, D) -> (1, L, D)
-    u = u.unsqueeze(0)
-
-    # any shape -> (1, L)
-    y = y.reshape(-1).unsqueeze(0)
-
-    return u, y
+def _masked_mse(pred, target, washout):
+    """MSE ignoring the first `washout` (cold-state) steps."""
+    if washout > 0 and pred.shape[1] > washout:
+        pred = pred[:, washout:]
+        target = target[:, washout:]
+    return nn.functional.mse_loss(pred, target)
 
 
 def train_model(
@@ -37,240 +36,146 @@ def train_model(
     model_name="mamba1"
 ):
 
-    # ========================================================
-    # Device
-    # ========================================================
-
     model = model.to(device)
 
-    # Optional PyTorch 2.x compile
     if config.get("compile", False):
         model = torch.compile(model)
 
-    # ========================================================
-    # Optimizer
-    # ========================================================
+    # --------------------------------------------------------
+    # Config
+    # --------------------------------------------------------
+
+    epochs = config["epochs"]
+    seq_len = config.get("seq_len", 1024)
+    washout = config.get("washout", 0)
+    batch_size = config.get("batch_size", 32)
+    grad_clip = config.get("grad_clip", 1.0)
+
+    # --------------------------------------------------------
+    # Optimizer / schedule / loss
+    # --------------------------------------------------------
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=config["lr"],
-        weight_decay=config.get("weight_decay", 1e-2)
+        weight_decay=config.get("weight_decay", 1e-2),
     )
-
-    # ========================================================
-    # Scheduler
-    # ========================================================
-
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer,
-        T_max=config["epochs"]
-    )
-
-    # ========================================================
-    # Loss
-    # ========================================================
-
-    loss_fn = nn.MSELoss()
-
-    # ========================================================
-    # Precision
-    #
-    # Train in fp32: causal_conv1d's fp16 channel-last kernel
-    # (used by Mamba/Mamba2) requires 8-element stride alignment
-    # that these single-channel system-ID inputs violate, raising
-    # a stride error. fp32 avoids it; the models are small enough
-    # that fp32 on the GPU is fast.
-    # ========================================================
-
-    use_amp = False
-
-    scaler = GradScaler(
-        enabled=use_amp
-    )
-
-    # ========================================================
-    # Config
-    # ========================================================
-
-    seq_len = config.get("seq_len", 100)
 
     save_dir = f"outputs/{model_name}"
-
     os.makedirs(save_dir, exist_ok=True)
+
+    # --------------------------------------------------------
+    # Materialize sequences on device once
+    # --------------------------------------------------------
+
+    train_seqs = _seq_tensors(train_data, device)
+    valid_seqs = _seq_tensors(valid_data, device)
+
+    # sequences long enough to crop a training window from
+    croppable = [
+        (u, y) for (u, y) in train_seqs if u.shape[0] >= seq_len
+    ]
+    if not croppable:
+        # fall back to whatever we have (pad-free: use full seqs)
+        croppable = train_seqs
+
+    total_len = sum(u.shape[0] for (u, _) in croppable)
+
+    # An "epoch" = enough random-crop minibatches to cover the data.
+    steps_per_epoch = max(20, total_len // seq_len)
+
+    # cosine schedule over the real number of optimizer steps
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=epochs * steps_per_epoch,
+    )
 
     best_valid_loss = float("inf")
 
-    # ========================================================
+    # --------------------------------------------------------
     # Epoch loop
-    # ========================================================
+    # --------------------------------------------------------
 
-    for epoch in range(config["epochs"]):
+    for epoch in range(epochs):
 
         # ====================================================
-        # TRAIN
+        # TRAIN  (minibatches of random sub-sequence crops)
         # ====================================================
 
         model.train()
-
         train_loss = 0.0
-        train_steps = 0
 
-        for (u, y, _) in train_data:
+        for _ in range(steps_per_epoch):
 
-            # ------------------------------------------------
-            # Tensor conversion + shape normalization
-            # u -> (1, L, D), y -> (1, L)
-            # ------------------------------------------------
+            bu, by = [], []
 
-            u, y = _to_batched(u, y)
+            for _ in range(batch_size):
 
-            # ------------------------------------------------
-            # Sequence chunking
-            # Shape:
-            # u = (B, L, D)
-            # y = (B, L)
-            # ------------------------------------------------
+                u, y = random.choice(croppable)
+                L = u.shape[0]
 
-            seq_total = u.shape[1]
+                if L > seq_len:
+                    s = random.randint(0, L - seq_len)
+                else:
+                    s = 0
 
-            for i in range(0, seq_total, seq_len):
+                bu.append(u[s:s + seq_len])
+                by.append(y[s:s + seq_len])
 
-                u_batch = (
-                    u[:, i:i + seq_len]
-                    .to(device, non_blocking=True)
-                )
+            u_batch = torch.stack(bu, dim=0)          # (B, seq_len, D)
+            y_batch = torch.stack(by, dim=0)          # (B, seq_len)
 
-                y_batch = (
-                    y[:, i:i + seq_len]
-                    .to(device, non_blocking=True)
-                )
+            optimizer.zero_grad(set_to_none=True)
 
-                optimizer.zero_grad(
-                    set_to_none=True
-                )
+            pred = model(u_batch)
+            if pred.ndim == 3 and pred.shape[-1] == 1:
+                pred = pred.squeeze(-1)
 
-                # --------------------------------------------
-                # Forward
-                # --------------------------------------------
+            loss = _masked_mse(pred, y_batch, washout)
 
-                with autocast(
-                    device_type=device.type,
-                    enabled=use_amp
-                ):
+            if not torch.isfinite(loss):
+                print("Invalid loss detected, skipping step")
+                continue
 
-                    pred = model(u_batch)
+            loss.backward()
 
-                    # safe squeeze
-                    if pred.ndim == 3 and pred.shape[-1] == 1:
-                        pred = pred.squeeze(-1)
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(),
+                max_norm=grad_clip,
+            )
 
-                    loss = loss_fn(
-                        pred,
-                        y_batch
-                    )
+            optimizer.step()
+            scheduler.step()
 
-                # --------------------------------------------
-                # NaN / Inf protection
-                # --------------------------------------------
+            train_loss += loss.item()
 
-                if not torch.isfinite(loss):
-                    print("Invalid loss detected")
-                    continue
-
-                # --------------------------------------------
-                # Backward
-                # --------------------------------------------
-
-                scaler.scale(loss).backward()
-
-                scaler.unscale_(optimizer)
-
-                torch.nn.utils.clip_grad_norm_(
-                    model.parameters(),
-                    max_norm=1.0
-                )
-
-                scaler.step(optimizer)
-
-                scaler.update()
-
-                train_loss += loss.item()
-                train_steps += 1
-
-        # ----------------------------------------------------
-        # Average train loss
-        # ----------------------------------------------------
-
-        train_loss /= max(train_steps, 1)
+        train_loss /= steps_per_epoch
 
         # ====================================================
-        # VALIDATION
+        # VALIDATION  (free-run over each full valid sequence)
         # ====================================================
 
         model.eval()
-
         valid_loss = 0.0
-        valid_steps = 0
+        valid_count = 0
 
         with torch.no_grad():
 
-            for (u, y, _) in valid_data:
+            for (u, y) in valid_seqs:
 
-                u, y = _to_batched(u, y)
+                pred = model(u.unsqueeze(0))
+                if pred.ndim == 3 and pred.shape[-1] == 1:
+                    pred = pred.squeeze(-1)
 
-                seq_total = u.shape[1]
+                valid_loss += _masked_mse(
+                    pred, y.unsqueeze(0), washout
+                ).item()
+                valid_count += 1
 
-                # --------------------------------------------
-                # Validate ALL chunks
-                # --------------------------------------------
-
-                for i in range(0, seq_total, seq_len):
-
-                    u_batch = (
-                        u[:, i:i + seq_len]
-                        .to(device, non_blocking=True)
-                    )
-
-                    y_batch = (
-                        y[:, i:i + seq_len]
-                        .to(device, non_blocking=True)
-                    )
-
-                    with autocast(
-                        device_type=device.type,
-                        enabled=use_amp
-                    ):
-
-                        pred = model(u_batch)
-
-                        if (
-                            pred.ndim == 3
-                            and pred.shape[-1] == 1
-                        ):
-                            pred = pred.squeeze(-1)
-
-                        loss = loss_fn(
-                            pred,
-                            y_batch
-                        )
-
-                    valid_loss += loss.item()
-                    valid_steps += 1
-
-        # ----------------------------------------------------
-        # Average validation loss
-        # ----------------------------------------------------
-
-        valid_loss /= max(valid_steps, 1)
+        valid_loss /= max(valid_count, 1)
 
         # ====================================================
-        # Scheduler step
-        # ====================================================
-
-        scheduler.step()
-
-        # ====================================================
-        # Save best checkpoint
+        # Save best checkpoint (lowest free-run valid loss)
         # ====================================================
 
         if valid_loss < best_valid_loss:
@@ -280,19 +185,10 @@ def train_model(
             torch.save(
                 {
                     "epoch": epoch,
-                    "model_state_dict":
-                        model.state_dict(),
-
-                    "optimizer_state_dict":
-                        optimizer.state_dict(),
-
-                    "scheduler_state_dict":
-                        scheduler.state_dict(),
-
-                    "valid_loss":
-                        valid_loss,
+                    "model_state_dict": model.state_dict(),
+                    "valid_loss": valid_loss,
                 },
-                f"{save_dir}/best_model.pt"
+                f"{save_dir}/best_model.pt",
             )
 
         # ====================================================

@@ -2,10 +2,9 @@ import argparse
 import os
 
 import identibench as idb
+import numpy as np
 import pandas as pd
 import torch
-
-from torch.amp import autocast
 
 from utils.seed import set_seed
 from utils.preprocessing import apply_init_window
@@ -147,6 +146,50 @@ def build_model(context):
     ]
 
     # --------------------------------------------------------
+    # Normalization (z-score) using TRAIN statistics.
+    #
+    # The raw outputs are in millivolts with a large dynamic
+    # range; regressing them directly makes the MSE objective
+    # ill-conditioned (huge / exploding gradients -> NaN) and
+    # keeps the RMSE orders of magnitude above SOTA. We train
+    # the model on standardized signals and denormalize the
+    # predictions back to physical units for the benchmark.
+    # --------------------------------------------------------
+
+    all_u = np.concatenate(
+        [np.asarray(u, dtype=np.float64).reshape(len(u), -1)
+         for (u, y, _) in train_data],
+        axis=0,
+    )
+    all_y = np.concatenate(
+        [np.asarray(y, dtype=np.float64).reshape(-1, 1)
+         for (u, y, _) in train_data],
+        axis=0,
+    )
+
+    u_mean = all_u.mean(axis=0)
+    u_std = all_u.std(axis=0) + 1e-8
+    y_mean = float(all_y.mean())
+    y_std = float(all_y.std() + 1e-8)
+
+    def _normalize(data):
+        out = []
+        for (u, y, attrs) in data:
+            un = (np.asarray(u, dtype=np.float32).reshape(len(u), -1)
+                  - u_mean) / u_std
+            yn = (np.asarray(y, dtype=np.float32).reshape(-1, 1)
+                  - y_mean) / y_std
+            out.append((un.astype(np.float32), yn.astype(np.float32), attrs))
+        return out
+
+    train_data = _normalize(train_data)
+    valid_data = _normalize(valid_data)
+
+    # tensors for the predictor (de/normalization at inference)
+    u_mean_t = torch.tensor(u_mean, dtype=torch.float32, device=device)
+    u_std_t = torch.tensor(u_std, dtype=torch.float32, device=device)
+
+    # --------------------------------------------------------
     # Build model
     # --------------------------------------------------------
 
@@ -226,7 +269,7 @@ def build_model(context):
         model.eval()
 
         # ----------------------------------------------------
-        # Convert input
+        # Convert + normalize input (train-set statistics)
         # ----------------------------------------------------
 
         u_test = torch.as_tensor(
@@ -239,6 +282,8 @@ def build_model(context):
         if u_test.ndim == 1:
             u_test = u_test.unsqueeze(-1)
 
+        u_test = (u_test - u_mean_t) / u_std_t
+
         with torch.no_grad():
 
             # ============================================
@@ -246,8 +291,9 @@ def build_model(context):
             #
             # Models are y_t = f(u_1:t) (not autoregressive
             # on y), so for the prediction task we warm up the
-            # hidden state with a zero-input prefix of the same
-            # length as the provided initial condition.
+            # hidden state with a neutral (mean) input prefix of
+            # the same length as the provided initial condition.
+            # In normalized space the mean input is zero.
             # For simulation, y_init is empty -> warm_len = 0.
             # ============================================
 
@@ -269,37 +315,26 @@ def build_model(context):
                 u_full = u_test
 
             # ============================================
-            # Inference in fp32 over bounded contiguous chunks.
-            #
-            # causal_conv1d's fp16 channel-last kernel requires
-            # 8-element stride alignment that long / autocast
-            # inputs violate (raising a stride error on the full
-            # test sequences). Running fp32 on contiguous chunks
-            # avoids it and bounds memory.
+            # Full-sequence free-run simulation in fp32.
+            # (verified to fit in memory for the full WH/Silverbox
+            #  test sequences; avoids state-reset artifacts.)
             # ============================================
 
-            chunk = 4096
-            L = u_full.shape[0]
-            preds = []
+            out = model(
+                u_full.unsqueeze(0).contiguous()
+            )
 
-            for i in range(0, L, chunk):
+            if out.ndim == 3 and out.shape[-1] == 1:
+                out = out.squeeze(-1)
 
-                ui = (
-                    u_full[i:i + chunk]
-                    .unsqueeze(0)
-                    .contiguous()
-                )
+            # normalized prediction, drop warmup prefix
+            y_norm = out.squeeze(0)[warm_len:]
 
-                oi = model(ui)
+            # ============================================
+            # Denormalize back to physical units (mV)
+            # ============================================
 
-                if oi.ndim == 3 and oi.shape[-1] == 1:
-                    oi = oi.squeeze(-1)
-
-                preds.append(oi.squeeze(0))
-
-            pred = torch.cat(preds, dim=0)
-
-            y_pred = pred[warm_len:]
+            y_pred = y_norm * y_std + y_mean
 
         return (
 
@@ -372,13 +407,26 @@ if __name__ == "__main__":
 
             "n_layers": int(os.environ.get("IDB_N_LAYERS", "6")),
 
-            "epochs": int(os.environ.get("IDB_EPOCHS", "10")),
+            # Train long enough to actually converge (the few-second
+            # runs were badly undertrained). env-overridable.
+            "epochs": int(os.environ.get("IDB_EPOCHS", "60")),
 
-            "lr": 1e-3,
+            "lr": float(os.environ.get("IDB_LR", "1e-3")),
 
-            "seq_len": 100,
+            # Longer windows + washout so the model learns the
+            # dynamics with a warmed-up state instead of cold 100-step
+            # snippets.
+            "seq_len": int(os.environ.get("IDB_SEQ_LEN", "1024")),
 
-            "weight_decay": 1e-2,
+            "washout": int(os.environ.get("IDB_WASHOUT", "100")),
+
+            # Minibatch of random sub-sequence crops -> stable
+            # gradients + strong augmentation (curbs overfitting).
+            "batch_size": int(os.environ.get("IDB_BATCH", "32")),
+
+            "weight_decay": float(os.environ.get("IDB_WD", "1e-2")),
+
+            "grad_clip": 1.0,
 
             "compile": False,
         }
