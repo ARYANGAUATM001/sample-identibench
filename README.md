@@ -98,6 +98,12 @@ Silverbox per-test-set RMSE (mamba1): multisine **10.19**, arrow_full **18.32**,
 arrow_no_extrapolation **11.37** mV. (The `arrow` sets probe amplitude
 extrapolation and are intentionally harder.)
 
+Config behind the table: corrected pipeline above, `n_times=2`,
+`seq_len=1024`, `washout=100`. mamba1 was run for 200 epochs, mamba2 for 80
+epochs (both well past convergence — the free-run validation loss plateaus by
+~epoch 80). `python main.py --model <m>` uses `IDB_EPOCHS=60` by default and
+reproduces comparable numbers; override with the env vars below.
+
 **mamba3** is not competitive: its pure-Python scan can't be trained to
 convergence in a practical budget, and it underfits. It is reported as
 experimental rather than head-to-head.

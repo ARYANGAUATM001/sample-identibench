@@ -9,5 +9,11 @@ setuptools>=68.0
 
 identibench
 
+# Mamba / Mamba2 CUDA kernels (require an Ampere+ GPU; install the prebuilt
+# cu12torch2.4 wheels matching your torch/python to avoid a source build).
 mamba-ssm==2.2.2
 causal-conv1d==1.4.0
+
+# mamba-ssm 2.2.2 imports transformers.generation.GreedySearchDecoderOnlyOutput,
+# which newer transformers removed -> pin a compatible version.
+transformers==4.43.3
