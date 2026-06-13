@@ -1,8 +1,31 @@
 import os
+import numpy as np
 import torch
 import torch.nn as nn
 
 from torch.amp import autocast, GradScaler
+
+
+def _to_batched(u, y):
+    """Convert a single (u, y) numpy/tensor pair to batched tensors.
+
+    Returns u of shape (1, L, D) and y of shape (1, L).
+    """
+
+    u = torch.as_tensor(np.asarray(u), dtype=torch.float32)
+    y = torch.as_tensor(np.asarray(y), dtype=torch.float32)
+
+    # (L,) -> (L, 1)
+    if u.ndim == 1:
+        u = u.unsqueeze(-1)
+
+    # (L, D) -> (1, L, D)
+    u = u.unsqueeze(0)
+
+    # any shape -> (1, L)
+    y = y.reshape(-1).unsqueeze(0)
+
+    return u, y
 
 
 def train_model(
@@ -50,11 +73,19 @@ def train_model(
     loss_fn = nn.MSELoss()
 
     # ========================================================
-    # Mixed precision
+    # Precision
+    #
+    # Train in fp32: causal_conv1d's fp16 channel-last kernel
+    # (used by Mamba/Mamba2) requires 8-element stride alignment
+    # that these single-channel system-ID inputs violate, raising
+    # a stride error. fp32 avoids it; the models are small enough
+    # that fp32 on the GPU is fast.
     # ========================================================
 
+    use_amp = False
+
     scaler = GradScaler(
-        enabled=device.type == "cuda"
+        enabled=use_amp
     )
 
     # ========================================================
@@ -87,28 +118,11 @@ def train_model(
         for (u, y, _) in train_data:
 
             # ------------------------------------------------
-            # Tensor conversion
+            # Tensor conversion + shape normalization
+            # u -> (1, L, D), y -> (1, L)
             # ------------------------------------------------
 
-            u = u.float()
-            y = y.float()
-
-            # ------------------------------------------------
-            # Target shape fix
-            # ------------------------------------------------
-
-            if y.ndim == 3 and y.shape[-1] == 1:
-                y = y.squeeze(-1)
-
-            # ------------------------------------------------
-            # Ensure batch dimension
-            # ------------------------------------------------
-
-            if u.ndim == 2:
-                u = u.unsqueeze(0)
-
-            if y.ndim == 1:
-                y = y.unsqueeze(0)
+            u, y = _to_batched(u, y)
 
             # ------------------------------------------------
             # Sequence chunking
@@ -141,7 +155,7 @@ def train_model(
 
                 with autocast(
                     device_type=device.type,
-                    enabled=device.type == "cuda"
+                    enabled=use_amp
                 ):
 
                     pred = model(u_batch)
@@ -202,17 +216,7 @@ def train_model(
 
             for (u, y, _) in valid_data:
 
-                u = u.float()
-                y = y.float()
-
-                if y.ndim == 3 and y.shape[-1] == 1:
-                    y = y.squeeze(-1)
-
-                if u.ndim == 2:
-                    u = u.unsqueeze(0)
-
-                if y.ndim == 1:
-                    y = y.unsqueeze(0)
+                u, y = _to_batched(u, y)
 
                 seq_total = u.shape[1]
 
@@ -234,7 +238,7 @@ def train_model(
 
                     with autocast(
                         device_type=device.type,
-                        enabled=device.type == "cuda"
+                        enabled=use_amp
                     ):
 
                         pred = model(u_batch)

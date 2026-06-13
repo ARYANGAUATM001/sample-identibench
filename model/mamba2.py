@@ -29,13 +29,22 @@ class Mamba2Block(nn.Module):
 
         # ----------------------------------------------------
         # True Mamba-2 SSD layer
+        #
+        # headdim is chosen so that nheads = expand*d_model/headdim
+        # is a multiple of 8. causal_conv1d's channel-last kernel
+        # otherwise raises a stride-alignment error (e.g. the default
+        # headdim=64 gives nheads=4 for d_model=128 and fails).
         # ----------------------------------------------------
+
+        d_inner = expand * d_model
+        headdim = d_inner // 8  # -> nheads = 8
 
         self.mamba = Mamba2(
             d_model=d_model,
             d_state=d_state,
             d_conv=d_conv,
             expand=expand,
+            headdim=headdim,
         )
 
         # ----------------------------------------------------

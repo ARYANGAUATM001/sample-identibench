@@ -11,7 +11,7 @@ from utils.seed import set_seed
 from utils.preprocessing import apply_init_window
 
 from configs import DEFAULT_CONFIG
-from trainer import train_model
+from model.trainer import train_model
 
 
 # ============================================================
@@ -40,15 +40,15 @@ args = parser.parse_args()
 
 if args.model == "mamba1":
 
-    from models.mamba1 import Model
+    from model.mamba1 import Model
 
 elif args.model == "mamba2":
 
-    from models.mamba2 import Model
+    from model.mamba2 import Model
 
 elif args.model == "mamba3":
 
-    from models.mamba3 import Model
+    from model.mamba3 import Model
 
 
 # ============================================================
@@ -219,7 +219,8 @@ def build_model(context):
 
     def predictor(
         u_test,
-        y_init=None
+        y_init=None,
+        attrs=None
     ):
 
         model.eval()
@@ -240,67 +241,65 @@ def build_model(context):
 
         with torch.no_grad():
 
-            with autocast(
-                device_type=device.type,
-                enabled=device.type == "cuda"
-            ):
+            # ============================================
+            # Warmup handling
+            #
+            # Models are y_t = f(u_1:t) (not autoregressive
+            # on y), so for the prediction task we warm up the
+            # hidden state with a zero-input prefix of the same
+            # length as the provided initial condition.
+            # For simulation, y_init is empty -> warm_len = 0.
+            # ============================================
 
-                # ============================================
-                # Warmup handling
-                # ============================================
+            if y_init is not None and len(y_init) > 0:
 
-                if y_init is not None:
+                warm_len = len(y_init)
 
-                    y_init = torch.as_tensor(
-                        y_init,
-                        dtype=torch.float32,
-                        device=device
-                    )
+                u_warm = torch.zeros(
+                    (warm_len, u_test.shape[-1]),
+                    dtype=torch.float32,
+                    device=device
+                )
 
-                    warm_len = len(y_init)
+                u_full = torch.cat([u_warm, u_test], dim=0)
 
-                    # ----------------------------------------
-                    # Approximate warmup
-                    #
-                    # Since current models are:
-                    # y_t = f(u_1:t)
-                    #
-                    # and NOT autoregressive on y,
-                    # we warmup hidden states using
-                    # zero-input prefix.
-                    # ----------------------------------------
+            else:
 
-                    u_warm = torch.zeros(
+                warm_len = 0
+                u_full = u_test
 
-                        (
-                            warm_len,
-                            u_test.shape[-1]
-                        ),
+            # ============================================
+            # Inference in fp32 over bounded contiguous chunks.
+            #
+            # causal_conv1d's fp16 channel-last kernel requires
+            # 8-element stride alignment that long / autocast
+            # inputs violate (raising a stride error on the full
+            # test sequences). Running fp32 on contiguous chunks
+            # avoids it and bounds memory.
+            # ============================================
 
-                        dtype=torch.float32,
-                        device=device
-                    )
+            chunk = 4096
+            L = u_full.shape[0]
+            preds = []
 
-                    u_full = torch.cat(
-                        [u_warm, u_test],
-                        dim=0
-                    )
+            for i in range(0, L, chunk):
 
-                    pred = model(
-                        u_full.unsqueeze(0)
-                    )
+                ui = (
+                    u_full[i:i + chunk]
+                    .unsqueeze(0)
+                    .contiguous()
+                )
 
-                    pred = pred.squeeze(0)
+                oi = model(ui)
 
-                    y_pred = pred[warm_len:]
+                if oi.ndim == 3 and oi.shape[-1] == 1:
+                    oi = oi.squeeze(-1)
 
-                else:
+                preds.append(oi.squeeze(0))
 
-                    pred = model(
-                        u_test.unsqueeze(0)
-                    )
+            pred = torch.cat(preds, dim=0)
 
-                    y_pred = pred.squeeze(0)
+            y_pred = pred[warm_len:]
 
         return (
 
@@ -326,31 +325,31 @@ if __name__ == "__main__":
     # Benchmarks
     # --------------------------------------------------------
 
+    # Two datasets only: Silverbox + Wiener-Hammerstein
+    # (simulation / free-run task, the headline metric on the
+    #  nonlinear-benchmark results-reporting page)
     sim_specs = {
-
-        "WH_Sim":
-            idb.simulation_benchmarks[
-                "WH_Sim"
-            ],
 
         "Silverbox_Sim":
             idb.simulation_benchmarks[
                 "Silverbox_Sim"
             ],
-    }
 
-    pred_specs = {
-
-        "WH_Pred":
-            idb.prediction_benchmarks[
-                "WH_Pred"
+        "WH_Sim":
+            idb.simulation_benchmarks[
+                "WH_Sim"
             ],
     }
 
     all_specs = {
         **sim_specs,
-        **pred_specs
     }
+
+    # Optional subset for quick smoke tests, e.g. IDB_BENCH=Silverbox_Sim
+    _only = os.environ.get("IDB_BENCH", "").strip()
+    if _only:
+        keep = {k.strip() for k in _only.split(",")}
+        all_specs = {k: v for k, v in all_specs.items() if k in keep}
 
     # --------------------------------------------------------
     # Run benchmarks
@@ -362,8 +361,8 @@ if __name__ == "__main__":
 
         build_model=build_model,
 
-        # more stable statistics
-        n_times=5,
+        # repeated runs for mean +/- std (env-overridable)
+        n_times=int(os.environ.get("IDB_N_TIMES", "2")),
 
         hyperparameters={
 
@@ -371,9 +370,9 @@ if __name__ == "__main__":
 
             "d_state": 64,
 
-            "n_layers": 6,
+            "n_layers": int(os.environ.get("IDB_N_LAYERS", "6")),
 
-            "epochs": 10,
+            "epochs": int(os.environ.get("IDB_EPOCHS", "10")),
 
             "lr": 1e-3,
 
@@ -401,6 +400,25 @@ if __name__ == "__main__":
 
     df = pd.DataFrame(agg)
 
-    print(
-        df.to_string(index=False)
+    # --------------------------------------------------------
+    # Persist results
+    # --------------------------------------------------------
+
+    out_dir = f"outputs/{args.model}"
+    os.makedirs(out_dir, exist_ok=True)
+
+    results.to_csv(
+        f"{out_dir}/raw_results.csv",
+        index=False
     )
+
+    df.to_csv(
+        f"{out_dir}/aggregated_results.csv",
+        index=False
+    )
+
+    print(f"\n===== {args.model} : raw per-run results =====")
+    print(results.to_string(index=False))
+
+    print(f"\n===== {args.model} : aggregated (mean / std) =====")
+    print(df.to_string(index=False))
