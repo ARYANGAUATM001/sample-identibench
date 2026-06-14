@@ -90,7 +90,8 @@ python main.py --model mamba2
 ```
 
 **No GPU locally?** Run all three on the cluster with one command:
-`./run_cluster.sh` (syncs, runs on the RTX 3090, pulls logs back).
+`./benchmark_mamba_on_cluster.sh` (syncs, runs each model on the RTX 3090, pulls
+each model's logs back as it finishes). Requires the **university VPN/network**.
 
 Each run writes a timestamped folder `logs/<date_time>_<model>/` (full
 `run.log`, `config.json`, result CSVs); a copy also lands in

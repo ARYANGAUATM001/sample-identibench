@@ -27,5 +27,5 @@ identibench
 #   pip install transformers==4.43.3   # mamba-ssm 2.2.2 needs this older transformers
 #
 # (See README "Setup & Running". The cluster env `idbench` is already set up
-#  this way; `./run_cluster.sh` runs all three there without any local install.)
+#  this way; `./benchmark_mamba_on_cluster.sh` runs all three there.)
 # ---------------------------------------------------------------------------
