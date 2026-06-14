@@ -4,16 +4,44 @@ import json
 import os
 import sys
 
-import identibench as idb
-import numpy as np
-import pandas as pd
-import torch
 
-from utils.seed import set_seed
-from utils.preprocessing import apply_init_window
+# ============================================================
+# Per-run logging (stdlib only, set up BEFORE the heavy imports
+# so the log folder + progress appear immediately, and the whole
+# run -- including the slow mamba_ssm import -- is captured)
+# ============================================================
 
-from configs import DEFAULT_CONFIG
-from model.trainer import train_model
+class _Tee:
+    """Write stream that mirrors output to the console and a log file."""
+
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, data):
+        for s in self.streams:
+            s.write(data)
+            s.flush()
+
+    def flush(self):
+        for s in self.streams:
+            s.flush()
+
+
+def setup_run_dir(model_name):
+    """Create logs/<date_time>_<model>/ and tee stdout+stderr into it."""
+
+    ts = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    run_dir = os.path.join("logs", f"{ts}_{model_name}")
+    os.makedirs(run_dir, exist_ok=True)
+
+    log_file = open(os.path.join(run_dir, "run.log"), "w")
+
+    sys.stdout = _Tee(sys.__stdout__, log_file)
+    sys.stderr = _Tee(sys.__stderr__, log_file)
+
+    print(f"==== run {ts} | model={model_name} | logging to {run_dir} ====")
+
+    return run_dir
 
 
 # ============================================================
@@ -35,22 +63,47 @@ parser.add_argument(
 
 args = parser.parse_args()
 
+# start logging immediately, before any heavy import
+run_dir = setup_run_dir(args.model)
+
+
+# ============================================================
+# HEAVY IMPORTS (captured in the log from here on)
+# ============================================================
+
+print("Importing scientific stack (torch, identibench) ...")
+
+import identibench as idb  # noqa: E402
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+import torch  # noqa: E402
+
+from utils.seed import set_seed  # noqa: E402
+from utils.preprocessing import apply_init_window  # noqa: E402
+
+from configs import DEFAULT_CONFIG  # noqa: E402
+from model.trainer import train_model  # noqa: E402
+
 
 # ============================================================
 # IMPORT MODEL
 # ============================================================
 
-if args.model == "mamba1":
+print(
+    f"Loading model libraries for {args.model} "
+    "(importing mamba_ssm can take ~15s the first time) ..."
+)
 
-    from model.mamba1 import Model
+if args.model == "mamba1":
+    from model.mamba1 import Model  # noqa: E402
 
 elif args.model == "mamba2":
-
-    from model.mamba2 import Model
+    from model.mamba2 import Model  # noqa: E402
 
 elif args.model == "mamba3":
+    from model.mamba3 import Model  # noqa: E402
 
-    from model.mamba3 import Model
+print(f"Libraries loaded for {args.model}.")
 
 
 # ============================================================
@@ -354,55 +407,12 @@ def build_model(context):
 
 
 # ============================================================
-# Per-run logging
-# ============================================================
-
-class _Tee:
-    """Write stream that mirrors output to the console and a log file."""
-
-    def __init__(self, *streams):
-        self.streams = streams
-
-    def write(self, data):
-        for s in self.streams:
-            s.write(data)
-            s.flush()
-
-    def flush(self):
-        for s in self.streams:
-            s.flush()
-
-
-def setup_run_dir(model_name):
-    """Create logs/<date_time>_<model>/ and tee stdout+stderr into it."""
-
-    ts = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    run_dir = os.path.join("logs", f"{ts}_{model_name}")
-    os.makedirs(run_dir, exist_ok=True)
-
-    log_path = os.path.join(run_dir, "run.log")
-    log_file = open(log_path, "w")
-
-    sys.stdout = _Tee(sys.__stdout__, log_file)
-    sys.stderr = _Tee(sys.__stderr__, log_file)
-
-    print(f"==== run {ts} | model={model_name} | logging to {run_dir} ====")
-
-    return run_dir
-
-
-# ============================================================
 # MAIN
 # ============================================================
 
 if __name__ == "__main__":
 
-    # --------------------------------------------------------
-    # Timestamped per-run log folder (logs/<date_time>_<model>/)
-    # captures the full console output, config and results.
-    # --------------------------------------------------------
-
-    run_dir = setup_run_dir(args.model)
+    # run_dir / logging already set up at import time (top of file)
 
     # --------------------------------------------------------
     # Benchmarks
