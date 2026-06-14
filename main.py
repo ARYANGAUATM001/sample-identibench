@@ -477,10 +477,10 @@ if __name__ == "__main__":
 
         "washout": int(os.environ.get("IDB_WASHOUT", "100")),
 
-        # Minibatch of random sub-sequence crops -> stable
-        # gradients + strong augmentation (curbs overfitting).
-        # 64 fills the 3090 better -> faster epochs.
-        "batch_size": int(os.environ.get("IDB_BATCH", "64")),
+        # Minibatch of random sub-sequence crops -> stable gradients +
+        # augmentation. 32 keeps epochs fast (bf16/TF32 then give a net
+        # speedup); set IDB_BATCH=64 to trade speed for a bit more accuracy.
+        "batch_size": int(os.environ.get("IDB_BATCH", "32")),
 
         "weight_decay": float(os.environ.get("IDB_WD", "1e-2")),
 

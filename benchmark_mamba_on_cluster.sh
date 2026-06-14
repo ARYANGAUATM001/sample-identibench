@@ -37,12 +37,15 @@ SSH="ssh $SSH_OPTS"
 # ---- config (default vs fast) -------------------------------------------
 if [ "${1:-}" = "fast" ]; then
   M12_ENV="IDB_N_TIMES=1 IDB_EPOCHS=15"
-  M3_ENV="IDB_N_TIMES=1 IDB_EPOCHS=5 IDB_N_LAYERS=2 IDB_SEQ_LEN=512"
+  # mamba3 is a pure-Python scan (~8-12 min/epoch) -> keep it tiny.
+  M3_ENV="IDB_N_TIMES=1 IDB_EPOCHS=2 IDB_N_LAYERS=1 IDB_SEQ_LEN=512"
   echo ">>> FAST mode (quick smoke run)"
 else
   M12_ENV="IDB_N_TIMES=2 IDB_EPOCHS=80"
-  M3_ENV="IDB_N_TIMES=1 IDB_EPOCHS=15 IDB_N_LAYERS=2 IDB_SEQ_LEN=512"
-  echo ">>> DEFAULT mode (mamba1/2 ~full, mamba3 reduced; mamba3 is slow)"
+  # mamba3 full-budget would take ~5h for a non-competitive (~40 mV) result;
+  # keep it short so the run finishes in ~30-40 min. It is experimental.
+  M3_ENV="IDB_N_TIMES=1 IDB_EPOCHS=4 IDB_N_LAYERS=1 IDB_SEQ_LEN=512"
+  echo ">>> DEFAULT mode (mamba1/2 ~full, mamba3 short+experimental; it is slow)"
 fi
 
 # ---- connectivity pre-check (helpful VPN hint) --------------------------
