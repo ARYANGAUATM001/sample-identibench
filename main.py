@@ -1,5 +1,8 @@
 import argparse
+import datetime
+import json
 import os
+import sys
 
 import identibench as idb
 import numpy as np
@@ -351,10 +354,55 @@ def build_model(context):
 
 
 # ============================================================
+# Per-run logging
+# ============================================================
+
+class _Tee:
+    """Write stream that mirrors output to the console and a log file."""
+
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, data):
+        for s in self.streams:
+            s.write(data)
+            s.flush()
+
+    def flush(self):
+        for s in self.streams:
+            s.flush()
+
+
+def setup_run_dir(model_name):
+    """Create logs/<date_time>_<model>/ and tee stdout+stderr into it."""
+
+    ts = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    run_dir = os.path.join("logs", f"{ts}_{model_name}")
+    os.makedirs(run_dir, exist_ok=True)
+
+    log_path = os.path.join(run_dir, "run.log")
+    log_file = open(log_path, "w")
+
+    sys.stdout = _Tee(sys.__stdout__, log_file)
+    sys.stderr = _Tee(sys.__stderr__, log_file)
+
+    print(f"==== run {ts} | model={model_name} | logging to {run_dir} ====")
+
+    return run_dir
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
 if __name__ == "__main__":
+
+    # --------------------------------------------------------
+    # Timestamped per-run log folder (logs/<date_time>_<model>/)
+    # captures the full console output, config and results.
+    # --------------------------------------------------------
+
+    run_dir = setup_run_dir(args.model)
 
     # --------------------------------------------------------
     # Benchmarks
@@ -390,46 +438,62 @@ if __name__ == "__main__":
     # Run benchmarks
     # --------------------------------------------------------
 
+    n_times = int(os.environ.get("IDB_N_TIMES", "2"))
+
+    hyperparameters = {
+
+        "hidden_dim": 128,
+
+        "d_state": 64,
+
+        "n_layers": int(os.environ.get("IDB_N_LAYERS", "6")),
+
+        # Train long enough to actually converge (the few-second
+        # runs were badly undertrained). env-overridable.
+        "epochs": int(os.environ.get("IDB_EPOCHS", "60")),
+
+        "lr": float(os.environ.get("IDB_LR", "1e-3")),
+
+        # Longer windows + washout so the model learns the
+        # dynamics with a warmed-up state instead of cold 100-step
+        # snippets.
+        "seq_len": int(os.environ.get("IDB_SEQ_LEN", "1024")),
+
+        "washout": int(os.environ.get("IDB_WASHOUT", "100")),
+
+        # Minibatch of random sub-sequence crops -> stable
+        # gradients + strong augmentation (curbs overfitting).
+        "batch_size": int(os.environ.get("IDB_BATCH", "32")),
+
+        "weight_decay": float(os.environ.get("IDB_WD", "1e-2")),
+
+        "grad_clip": 1.0,
+
+        "compile": False,
+    }
+
+    # Save the run configuration into the log folder
+    with open(os.path.join(run_dir, "config.json"), "w") as f:
+        json.dump(
+            {
+                "model": args.model,
+                "benchmarks": list(all_specs.keys()),
+                "n_times": n_times,
+                "hyperparameters": hyperparameters,
+            },
+            f,
+            indent=2,
+        )
+
     results = idb.run_benchmarks(
 
         all_specs,
 
         build_model=build_model,
 
-        # repeated runs for mean +/- std (env-overridable)
-        n_times=int(os.environ.get("IDB_N_TIMES", "2")),
+        n_times=n_times,
 
-        hyperparameters={
-
-            "hidden_dim": 128,
-
-            "d_state": 64,
-
-            "n_layers": int(os.environ.get("IDB_N_LAYERS", "6")),
-
-            # Train long enough to actually converge (the few-second
-            # runs were badly undertrained). env-overridable.
-            "epochs": int(os.environ.get("IDB_EPOCHS", "60")),
-
-            "lr": float(os.environ.get("IDB_LR", "1e-3")),
-
-            # Longer windows + washout so the model learns the
-            # dynamics with a warmed-up state instead of cold 100-step
-            # snippets.
-            "seq_len": int(os.environ.get("IDB_SEQ_LEN", "1024")),
-
-            "washout": int(os.environ.get("IDB_WASHOUT", "100")),
-
-            # Minibatch of random sub-sequence crops -> stable
-            # gradients + strong augmentation (curbs overfitting).
-            "batch_size": int(os.environ.get("IDB_BATCH", "32")),
-
-            "weight_decay": float(os.environ.get("IDB_WD", "1e-2")),
-
-            "grad_clip": 1.0,
-
-            "compile": False,
-        }
+        hyperparameters=hyperparameters,
     )
 
     # --------------------------------------------------------
@@ -452,21 +516,19 @@ if __name__ == "__main__":
     # Persist results
     # --------------------------------------------------------
 
+    # latest-run convenience copy
     out_dir = f"outputs/{args.model}"
     os.makedirs(out_dir, exist_ok=True)
 
-    results.to_csv(
-        f"{out_dir}/raw_results.csv",
-        index=False
-    )
-
-    df.to_csv(
-        f"{out_dir}/aggregated_results.csv",
-        index=False
-    )
+    # write results into BOTH the per-run log folder and outputs/<model>/
+    for d in (run_dir, out_dir):
+        results.to_csv(os.path.join(d, "raw_results.csv"), index=False)
+        df.to_csv(os.path.join(d, "aggregated_results.csv"), index=False)
 
     print(f"\n===== {args.model} : raw per-run results =====")
     print(results.to_string(index=False))
 
     print(f"\n===== {args.model} : aggregated (mean / std) =====")
     print(df.to_string(index=False))
+
+    print(f"\nAll logs + results for this run saved to: {run_dir}")
