@@ -78,6 +78,12 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import torch  # noqa: E402
 
+# Speed: use TF32 tensor cores for fp32 matmuls and autotune cuDNN kernels
+# (big speedup on Ampere GPUs like the RTX 3090, negligible accuracy impact).
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
+torch.backends.cudnn.benchmark = True
+
 from utils.seed import set_seed  # noqa: E402
 from utils.preprocessing import apply_init_window  # noqa: E402
 
@@ -473,11 +479,23 @@ if __name__ == "__main__":
 
         # Minibatch of random sub-sequence crops -> stable
         # gradients + strong augmentation (curbs overfitting).
-        "batch_size": int(os.environ.get("IDB_BATCH", "32")),
+        # 64 fills the 3090 better -> faster epochs.
+        "batch_size": int(os.environ.get("IDB_BATCH", "64")),
 
         "weight_decay": float(os.environ.get("IDB_WD", "1e-2")),
 
         "grad_clip": 1.0,
+
+        # Speed: validate (full free-run) every N epochs instead of every one.
+        "valid_every": int(os.environ.get("IDB_VALID_EVERY", "5")),
+
+        # Weight EMA: off by default (it lagged and hurt on this short,
+        # cosine-annealed training). Enable to experiment, e.g. IDB_EMA=0.99.
+        "ema_decay": float(os.environ.get("IDB_EMA", "0")),
+
+        # Speed: bf16 mixed precision on CUDA (verified to work with
+        # causal_conv1d, unlike fp16). Set IDB_AMP=none for plain fp32+TF32.
+        "amp": os.environ.get("IDB_AMP", "bf16"),
 
         "compile": False,
     }

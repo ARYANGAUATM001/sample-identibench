@@ -502,12 +502,20 @@ class Model(nn.Module):
             num_classes
         )
 
+        # Direct linear feed-through (BLA-style): captures the linear
+        # input->output term so the SSM only learns the nonlinear residual.
+        self.skip = nn.Linear(input_dim, num_classes)
+        nn.init.zeros_(self.skip.weight)
+        nn.init.zeros_(self.skip.bias)
+
     def forward(self, x):
 
         """
         x:
             (B, L, input_dim)
         """
+
+        u = x
 
         x = self.input_proj(x)
 
@@ -516,7 +524,7 @@ class Model(nn.Module):
 
         x = self.final_norm(x)
 
-        x = self.head(x)
+        x = self.head(x) + self.skip(u)
 
         if x.shape[-1] == 1:
             x = x.squeeze(-1)
