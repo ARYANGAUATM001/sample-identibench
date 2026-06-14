@@ -14,7 +14,7 @@ if [ ! -f .env ]; then
   echo "ERROR: .env not found (needs a line: username=<user>@<host>)"; exit 1
 fi
 HOST=$(grep -i '^username' .env | head -1 | sed -E 's/^username[[:space:]]*[:=][[:space:]]*//' | tr -d '[:space:]')
-KEY="$HOME/.ssh/tnt_purushottam_nawale_id_ed25519"
+KEY="$HOME/.ssh/l3s_purushottam_nawale_id_ed25519"
 SSH_OPTS="-i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
 
 echo ">>> stopping benchmark runs on $HOST ..."

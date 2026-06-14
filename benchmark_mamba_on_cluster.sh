@@ -27,7 +27,7 @@ if [ -z "$HOST" ]; then
   echo "ERROR: could not read username=<user>@<host> from .env"; exit 1
 fi
 
-KEY="$HOME/.ssh/tnt_purushottam_nawale_id_ed25519"
+KEY="$HOME/.ssh/l3s_purushottam_nawale_id_ed25519"
 PROXY="http://web-proxy.rrzn.uni-hannover.de:3128/"
 if [ ! -f "$KEY" ]; then echo "ERROR: SSH key not found: $KEY"; exit 1; fi
 
