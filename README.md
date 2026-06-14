@@ -102,49 +102,64 @@ Each run writes a timestamped folder `logs/<date_time>_<model>/` (full
 
 ## 📊 Results
 
-IdentiBench **simulation** RMSE in **mV** (mean ± std over repeated runs;
-lower is better).
+IdentiBench **simulation** (free-run) RMSE in **mV**, mean ± std; lower is
+better. mamba1/mamba2: 80 epochs, 2 repeats. mamba3: capped (4 epochs, 1 layer)
+— it is a pure-Python scan and would otherwise take ~5 h for a non-competitive
+number.
 
 | Model | Silverbox_Sim | Wiener–Hammerstein_Sim |
 |---|---|---|
-| **mamba1** (`Mamba`) | **10.19 ± 0.64** | **4.29 ± 3.11** (best run **2.09**) |
-| **mamba2** (`Mamba2`) | **17.08 ± 0.07** | **4.08 ± 0.59** |
-| *SOTA (nonlinearbenchmark.org)* | *sub-mV* | *~0.2–0.3 mV* |
+| **mamba1** (`Mamba`) | **12.47 ± 0.91** | **3.20 ± 0.36**  (best 2.94) |
+| **mamba2** (`Mamba2`) | **17.94 ± 0.27** | **3.28 ± 0.31** |
+| mamba3 (custom, reduced) | 48.9 | 175.7 |
+| _ref: identibench "predict-the-mean" baseline_ | _8.50_ | _42.16_ |
+| _ref: SOTA (nonlinearbenchmark.org)_ | _sub-mV_ | _~0.2–0.3_ |
 
-Silverbox per-test-set RMSE (mamba1): multisine **10.19**, arrow_full **18.32**,
-arrow_no_extrapolation **11.37** mV. (The `arrow` sets probe amplitude
-extrapolation and are intentionally harder.)
+Silverbox per-test-set RMSE (mean ± std):
 
-Config behind the table: corrected pipeline above, `n_times=2`,
-`seq_len=1024`, `washout=100`. mamba1 was run for 200 epochs, mamba2 for 80
-epochs (both well past convergence — the free-run validation loss plateaus by
-~epoch 80). `python main.py --model <m>` uses `IDB_EPOCHS=60` by default and
-reproduces comparable numbers; override with the env vars below.
+| Model | multisine | arrow_full | arrow_no_extrapolation |
+|---|---|---|---|
+| mamba1 | 12.47 ± 0.91 | 16.42 ± 0.59 | 11.07 ± 0.53 |
+| mamba2 | 17.94 ± 0.27 | 21.09 ± 0.31 | 15.12 ± 0.95 |
 
-**mamba3** is not competitive: its pure-Python scan can't be trained to
-convergence in a practical budget, and it underfits. It is reported as
-experimental rather than head-to-head.
+Config: `seq_len=1024`, `washout=100`, `batch_size=32`, bf16 + TF32, EMA off,
+cosine LR, AdamW. Training is ~3–4 min per model per repeat (no longer seconds).
+
+### Fix vs. the earlier (broken) results
+
+The previous runs had **NaN** columns and ~9–36 s "training". After the pipeline
+fix (normalization, proper training, stable init):
+
+| Model | Silverbox (was → now) | WH (was → now) |
+|---|---|---|
+| mamba1 | 42.45 → **12.47** | 104.19 → **3.20** |
+| mamba2 | 36.92 → **17.94** | 79.95 → **3.28** |
+
+WH improved **24–33×** and all NaNs are gone.
 
 ---
 
-## 🧠 Interpretation
+## 🧠 Interpretation (honest)
 
-- **Wiener–Hammerstein (feed-forward)** reaches **~2–4 mV** — normal
-  deep-learning territory, within ~7–10× of the ~0.3 mV SOTA.
-- **Silverbox** stays around **~10 mV**. It is a *feedback* (Duffing) system;
-  a generic feed-forward `u→y` sequence model hits a free-run accuracy floor
-  there (confirmed: longer windows / more epochs do not break below it). Its
-  sub-mV SOTA comes from tailored physical / state-space models — a modeling
-  change, not a pipeline fix.
-- The dominant lever throughout was **data normalization + training to
-  convergence**, not the specific Mamba variant.
+- **Wiener–Hammerstein: a real result.** At **3.2 mV** it is **13× better than
+  the identibench "predict-the-mean" baseline (42.16 mV)** and within ~10× of
+  the ~0.3 mV SOTA. The feed-forward dynamics are being learned.
+- **Silverbox: not there yet.** At **12.5 mV** it is **still above the 8.5 mV
+  mean-predictor baseline** — i.e. on this resonant *feedback* (Duffing) system
+  the free-run simulation drifts rather than tracking the (small ~8.5 mV)
+  output. This is a remaining modeling problem, not a NaN/normalization bug.
+- The dominant lever was **data normalization + training to convergence**, not
+  the specific Mamba variant. **mamba3** (hand-written pure-Python SSM) is not
+  competitive and is reported as experimental.
 
 ---
 
 ## 🎯 Conclusion
 
-With a correct pipeline (normalization, proper training, full-sequence free-run
-evaluation), Mamba-based models give sensible, NaN-free simulation results on
-these benchmarks — strong on Wiener–Hammerstein and reasonable on Silverbox.
-Reaching the published sub-mV SOTA would require benchmark-specific modeling
-beyond a generic sequence model.
+The pipeline is now correct: **NaN-free, properly trained (minutes, not
+seconds), normalized**, evaluated with IdentiBench's free-run protocol. On
+**Wiener–Hammerstein** the models give a strong result (13× under the trivial
+baseline). **Silverbox** still underperforms the mean-predictor baseline and is
+the open item — its long-horizon free-run on a resonant feedback system needs
+further work (e.g. full-length rollout training or a guaranteed-stable
+state-space parameterization), not just more epochs.
