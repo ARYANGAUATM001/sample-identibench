@@ -60,9 +60,12 @@ class Model(nn.Module):
         d_conv=4,
         num_classes=1,
         dropout=0.0,
+        use_skip=True,
     ):
 
         super().__init__()
+
+        self.use_skip = use_skip
 
         # Project dataset input features
         # into Mamba hidden dimension
@@ -93,12 +96,13 @@ class Model(nn.Module):
             num_classes
         )
 
-        # Direct linear feed-through (BLA-style): lets the model capture the
-        # linear input->output term directly so the SSM only learns the
-        # nonlinear residual. Starts near zero.
-        self.skip = nn.Linear(input_dim, num_classes)
-        nn.init.zeros_(self.skip.weight)
-        nn.init.zeros_(self.skip.bias)
+        # Direct linear feed-through (BLA-style): captures the linear u->y
+        # term so the SSM learns only the nonlinear residual. Starts near
+        # zero. Disable (use_skip=False) for resonators with no feed-through.
+        if self.use_skip:
+            self.skip = nn.Linear(input_dim, num_classes)
+            nn.init.zeros_(self.skip.weight)
+            nn.init.zeros_(self.skip.bias)
 
     def forward(self, x):
 
@@ -112,8 +116,10 @@ class Model(nn.Module):
 
         x = self.final_norm(x)
 
-        # (B, L, num_classes) = nonlinear head + linear skip
-        x = self.head(x) + self.skip(u)
+        # (B, L, num_classes) = nonlinear head (+ optional linear skip)
+        x = self.head(x)
+        if self.use_skip:
+            x = x + self.skip(u)
 
         # (B, L) for regression
         if x.shape[-1] == 1:

@@ -457,9 +457,12 @@ class Model(nn.Module):
         n_layers=8,
         expand=4,
         num_classes=1,
+        use_skip=True,
     ):
 
         super().__init__()
+
+        self.use_skip = use_skip
 
         # ----------------------------------------------------
         # Input projection
@@ -504,9 +507,10 @@ class Model(nn.Module):
 
         # Direct linear feed-through (BLA-style): captures the linear
         # input->output term so the SSM only learns the nonlinear residual.
-        self.skip = nn.Linear(input_dim, num_classes)
-        nn.init.zeros_(self.skip.weight)
-        nn.init.zeros_(self.skip.bias)
+        if self.use_skip:
+            self.skip = nn.Linear(input_dim, num_classes)
+            nn.init.zeros_(self.skip.weight)
+            nn.init.zeros_(self.skip.bias)
 
     def forward(self, x):
 
@@ -524,7 +528,9 @@ class Model(nn.Module):
 
         x = self.final_norm(x)
 
-        x = self.head(x) + self.skip(u)
+        x = self.head(x)
+        if self.use_skip:
+            x = x + self.skip(u)
 
         if x.shape[-1] == 1:
             x = x.squeeze(-1)

@@ -69,12 +69,22 @@ Hyperparameters (env-overridable, see `main.py`): `hidden_dim=128`,
 
 ## ▶️ Setup & Running
 
+**Clone the repository:**
+
+```bash
+git clone https://github.com/ARYANGAUATM001/sample-identibench.git
+cd sample-identibench
+```
+
 **Base install (works on CPU; enough for `mamba3` + the framework):**
 
 ```bash
 pip install -r requirements.txt
 python main.py --model mamba3        # pure-PyTorch, runs on CPU (slow)
 ```
+
+Each `python main.py --model <m>` call trains the model, runs the IdentiBench
+benchmarks (repeated `IDB_N_TIMES` times), and writes the evaluation metrics.
 
 **mamba1 / mamba2 need an NVIDIA GPU** (Ampere+ for mamba2) and the prebuilt
 `mamba-ssm` + `causal-conv1d` wheels — they do **not** `pip install` from source.
@@ -137,20 +147,45 @@ fix (normalization, proper training, stable init):
 
 WH improved **24–33×** and all NaNs are gone.
 
+### Silverbox: a resonator-tuned config beats the baseline
+
+The default config (above) leaves Silverbox at 12.5 mV — *worse* than the
+8.50 mV mean baseline, because Silverbox is a **resonator** (oscillatory
+dynamics) and the default settings don't capture it. A config tuned for the
+resonator (`IDB_SKIP=0` — drop the wrong-physics linear feed-through —
+`IDB_D_STATE=128 IDB_N_LAYERS=8 IDB_EPOCHS=150 IDB_SEQ_LEN=4096`, mamba1) flips
+that:
+
+| Silverbox set | mean baseline | default | **resonator-tuned** |
+|---|---|---|---|
+| multisine | 8.50 | 12.47 | **7.77** ✅ |
+| arrow_full | 16.15 | 16.42 | **11.89** ✅ |
+| arrow_no_extrapolation | 7.54 | 11.07 | **7.09** ✅ |
+
+It now **beats the mean-predictor baseline on every test set** — the model is
+actually learning the Silverbox dynamics. Reproduce:
+
+```bash
+IDB_BENCH=Silverbox_Sim IDB_SKIP=0 IDB_D_STATE=128 IDB_N_LAYERS=8 \
+  IDB_EPOCHS=150 IDB_SEQ_LEN=4096 IDB_WASHOUT=512 IDB_BATCH=16 \
+  python main.py --model mamba1
+```
+
 ---
 
 ## 🧠 Interpretation (honest)
 
 - **Wiener–Hammerstein: a real result.** At **3.2 mV** it is **13× better than
   the identibench "predict-the-mean" baseline (42.16 mV)** and within ~10× of
-  the ~0.3 mV SOTA. The feed-forward dynamics are being learned.
-- **Silverbox: not there yet.** At **12.5 mV** it is **still above the 8.5 mV
-  mean-predictor baseline** — i.e. on this resonant *feedback* (Duffing) system
-  the free-run simulation drifts rather than tracking the (small ~8.5 mV)
-  output. This is a remaining modeling problem, not a NaN/normalization bug.
-- The dominant lever was **data normalization + training to convergence**, not
-  the specific Mamba variant. **mamba3** (hand-written pure-Python SSM) is not
-  competitive and is reported as experimental.
+  the ~0.3 mV SOTA. The feed-forward dynamics are clearly learned.
+- **Silverbox: now learning it.** With the resonator-tuned config it reaches
+  **7.8 mV (multisine)** — **under the 8.5 mV baseline on all three test sets**.
+  The keys were dropping the linear feed-through (wrong physics for a
+  resonator) and giving the SSM more state/depth to represent the oscillation.
+  Still ~20× from sub-mV SOTA, but it is a genuine, baseline-beating model now.
+- **Per-benchmark configs.** WH likes the default (skip on, smaller model);
+  Silverbox needs the resonator-tuned config above. **mamba3** (hand-written
+  pure-Python SSM) is not competitive and is reported as experimental.
 
 ---
 
@@ -159,7 +194,9 @@ WH improved **24–33×** and all NaNs are gone.
 The pipeline is now correct: **NaN-free, properly trained (minutes, not
 seconds), normalized**, evaluated with IdentiBench's free-run protocol. On
 **Wiener–Hammerstein** the models give a strong result (13× under the trivial
-baseline). **Silverbox** still underperforms the mean-predictor baseline and is
-the open item — its long-horizon free-run on a resonant feedback system needs
-further work (e.g. full-length rollout training or a guaranteed-stable
-state-space parameterization), not just more epochs.
+baseline), and with a resonator-tuned config **Silverbox now also beats the
+mean-predictor baseline** (7.8 mV) — the model is learning both systems. Closing
+the remaining gap to the sub-mV SOTA would need benchmark-specific modeling
+(e.g. complex/oscillatory state-space parameterizations), but the broken
+behaviour the project started with — NaNs, seconds-long training, RMSE worse
+than a constant predictor — is fully resolved.

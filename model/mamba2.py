@@ -89,8 +89,11 @@ class Model(nn.Module):
         d_conv=4,
         num_classes=1,
         dropout=0.0,
+        use_skip=True,
     ):
         super().__init__()
+
+        self.use_skip = use_skip
 
         # ----------------------------------------------------
         # Input projection
@@ -137,9 +140,10 @@ class Model(nn.Module):
 
         # Direct linear feed-through (BLA-style): captures the linear
         # input->output term so the SSM only learns the nonlinear residual.
-        self.skip = nn.Linear(input_dim, num_classes)
-        nn.init.zeros_(self.skip.weight)
-        nn.init.zeros_(self.skip.bias)
+        if self.use_skip:
+            self.skip = nn.Linear(input_dim, num_classes)
+            nn.init.zeros_(self.skip.weight)
+            nn.init.zeros_(self.skip.bias)
 
     def forward(self, x):
 
@@ -160,8 +164,10 @@ class Model(nn.Module):
         # final norm
         x = self.final_norm(x)
 
-        # output projection = nonlinear head + linear skip
-        x = self.head(x) + self.skip(u)
+        # output projection = nonlinear head (+ optional linear skip)
+        x = self.head(x)
+        if self.use_skip:
+            x = x + self.skip(u)
 
         # safe squeeze for regression/binary
         if x.shape[-1] == 1:

@@ -274,7 +274,9 @@ def build_model(context):
             6
         ),
 
-        num_classes=1
+        num_classes=1,
+
+        use_skip=config.get("use_skip", True),
 
     ).to(device)
 
@@ -458,11 +460,16 @@ if __name__ == "__main__":
 
     hyperparameters = {
 
-        "hidden_dim": 128,
+        "hidden_dim": int(os.environ.get("IDB_HIDDEN", "128")),
 
-        "d_state": 64,
+        "d_state": int(os.environ.get("IDB_D_STATE", "64")),
 
         "n_layers": int(os.environ.get("IDB_N_LAYERS", "6")),
+
+        # Linear u->y feed-through. Helps the feed-forward WH, but is wrong
+        # physics for a resonator (Silverbox has no instantaneous feed-through)
+        # -> set IDB_SKIP=0 for Silverbox.
+        "use_skip": os.environ.get("IDB_SKIP", "1") == "1",
 
         # Train long enough to actually converge (the few-second
         # runs were badly undertrained). env-overridable.
