@@ -69,16 +69,32 @@ Hyperparameters (env-overridable, see `main.py`): `hidden_dim=128`,
 
 ## ▶️ Setup & Running
 
-```bash
-pip install -r requirements.txt          # torch, identibench, mamba-ssm, causal-conv1d, transformers
+**Base install (works on CPU; enough for `mamba3` + the framework):**
 
-python main.py --model mamba1
-python main.py --model mamba2
-python main.py --model mamba3
+```bash
+pip install -r requirements.txt
+python main.py --model mamba3        # pure-PyTorch, runs on CPU (slow)
 ```
 
-Results are written to `outputs/<model>/raw_results.csv` and
-`aggregated_results.csv`. Useful env overrides: `IDB_EPOCHS`, `IDB_N_TIMES`,
+**mamba1 / mamba2 need an NVIDIA GPU** (Ampere+ for mamba2) and the prebuilt
+`mamba-ssm` + `causal-conv1d` wheels — they do **not** `pip install` from source.
+Use a Python 3.10/3.11 env on a GPU machine:
+
+```bash
+pip install torch==2.4.0 --index-url https://download.pytorch.org/whl/cu121
+pip install "https://github.com/Dao-AILab/causal-conv1d/releases/download/v1.4.0/causal_conv1d-1.4.0+cu122torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl"
+pip install "https://github.com/state-spaces/mamba/releases/download/v2.2.2/mamba_ssm-2.2.2+cu122torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl"
+pip install transformers==4.43.3
+python main.py --model mamba1
+python main.py --model mamba2
+```
+
+**No GPU locally?** Run all three on the cluster with one command:
+`./run_cluster.sh` (syncs, runs on the RTX 3090, pulls logs back).
+
+Each run writes a timestamped folder `logs/<date_time>_<model>/` (full
+`run.log`, `config.json`, result CSVs); a copy also lands in
+`outputs/<model>/`. Useful env overrides: `IDB_EPOCHS`, `IDB_N_TIMES`,
 `IDB_SEQ_LEN`, `IDB_WASHOUT`, `IDB_BATCH`, `IDB_N_LAYERS`, `IDB_BENCH`.
 
 ---
