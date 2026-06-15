@@ -121,8 +121,8 @@ columns are omitted for width (config below).
 
 | benchmark_name | datasets | training_time_seconds | test_time_seconds | benchmark_type | metric_name | metric_score | test_sets.test.rmse_mV | test_sets.multisine.rmse_mV | test_sets.arrow_full.rmse_mV | test_sets.arrow_no_extrapolation.rmse_mV |
 |---|---|---|---|---|---|---|---|---|---|---|
-| BenchmarkWH_Simulation | [wh] | 4.94 | 1.01 | Simulation | rmse_mV | 42.16 | 42.16 | NaN | NaN | NaN |
 | BenchmarkSilverbox_Simulation | [silverbox] | 2.84 | 1.25 | Simulation | rmse_mV | 8.50 | NaN | 8.50 | 16.15 | 7.54 |
+| BenchmarkWH_Simulation | [wh] | 4.94 | 1.01 | Simulation | rmse_mV | 42.16 | 42.16 | NaN | NaN | NaN |
 
 **mamba1 (`Mamba`):**
 
