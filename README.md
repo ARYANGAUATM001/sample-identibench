@@ -123,8 +123,8 @@ mamba1 / mamba2: 2 repeats; mamba3: 1 (so its std is `NaN`).
 |----|----|----|----|----|----|----|----|----|----|----|----|----|
 |  | mean | std | mean | std | mean | std | mean | std | mean | std | mean | std |
 | benchmark_name |  |  |  |  |  |  |  |  |  |  |  |  |
-| BenchmarkSilverbox_Simulation | 197.258103 | 1.547924 | 0.102851 | 0.034021 | 12.468821 | 0.909218 | 12.468821 | 0.909218 | 16.415138 | 0.587108 | 11.066448 | 0.533905 |
-| BenchmarkWH_Simulation | 321.268224 | 1.681686 | 0.064012 | 0.000351 | 3.195953 | 0.356838 | NaN | NaN | NaN | NaN | NaN | NaN |
+| BenchmarkSilverbox_Simulation | 197.258102 | 1.547924 | 0.102936 | 0.034141 | 12.468821 | 0.909218 | 12.468821 | 0.909218 | 16.415138 | 0.587108 | 11.066448 | 0.533905 |
+| BenchmarkWH_Simulation | 321.268224 | 1.681686 | 0.064012 | 0.000351 | 3.195952 | 0.356838 | NaN | NaN | NaN | NaN | NaN | NaN |
 
 **mamba2 (`Mamba2`):**
 
@@ -132,8 +132,8 @@ mamba1 / mamba2: 2 repeats; mamba3: 1 (so its std is `NaN`).
 |----|----|----|----|----|----|----|----|----|----|----|----|----|
 |  | mean | std | mean | std | mean | std | mean | std | mean | std | mean | std |
 | benchmark_name |  |  |  |  |  |  |  |  |  |  |  |  |
-| BenchmarkSilverbox_Simulation | 153.625452 | 11.480023 | 1.562039 | 2.157255 | 17.943691 | 0.271387 | 17.943691 | 0.271387 | 21.087024 | 0.312836 | 15.119237 | 0.947109 |
-| BenchmarkWH_Simulation | 235.906765 | 2.495823 | 0.026285 | 0.000141 | 3.280356 | 0.305777 | NaN | NaN | NaN | NaN | NaN | NaN |
+| BenchmarkSilverbox_Simulation | 153.625452 | 11.480023 | 1.562039 | 2.157255 | 17.943691 | 0.271387 | 17.943690 | 0.271387 | 21.087025 | 0.312836 | 15.119237 | 0.947109 |
+| BenchmarkWH_Simulation | 235.906765 | 2.495823 | 0.026285 | 0.000141 | 3.280356 | 0.305778 | NaN | NaN | NaN | NaN | NaN | NaN |
 
 **mamba3 (custom, reduced — experimental):**
 
@@ -142,7 +142,7 @@ mamba1 / mamba2: 2 repeats; mamba3: 1 (so its std is `NaN`).
 |  | mean | std | mean | std | mean | std | mean | std | mean | std | mean | std |
 | benchmark_name |  |  |  |  |  |  |  |  |  |  |  |  |
 | BenchmarkSilverbox_Simulation | 900.726019 | NaN | 86.725079 | NaN | 48.898983 | NaN | 48.898983 | NaN | 48.393353 | NaN | 38.760036 | NaN |
-| BenchmarkWH_Simulation | 1445.559718 | NaN | 75.573285 | NaN | 175.653503 | NaN | NaN | NaN | NaN | NaN | NaN | NaN |
+| BenchmarkWH_Simulation | 1445.559718 | NaN | 75.573285 | NaN | 175.653500 | NaN | NaN | NaN | NaN | NaN | NaN | NaN |
 
 For comparison, the IdentiBench README's **"predict-the-mean" baseline** scores
 `metric_score` WH = **42.16** and Silverbox = **8.50** (multisine 8.50,
