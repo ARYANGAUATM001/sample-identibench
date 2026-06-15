@@ -1,3 +1,8 @@
+# ---------------------------------------------------------------------------
+# Base dependencies — CPU-installable everywhere.
+# This is enough to run the framework and the pure-PyTorch `mamba3` model.
+#   pip install -r requirements.txt
+# ---------------------------------------------------------------------------
 torch>=2.1.0
 numpy>=1.24.0
 pandas>=2.0.0
@@ -9,5 +14,18 @@ setuptools>=68.0
 
 identibench
 
-mamba-ssm==2.2.2
-causal-conv1d==1.4.0
+# ---------------------------------------------------------------------------
+# GPU-only — required ONLY for mamba1 (`Mamba`) and mamba2 (`Mamba2`).
+#
+# These have CUDA kernels and are NOT installable with a plain `pip install`
+# (a source build needs torch already present + nvcc, and fails on CPU).
+# On an NVIDIA GPU (Ampere+ for mamba2), use a Python 3.10/3.11 env and install
+# the PREBUILT wheels that match your torch/CUDA/python, e.g. torch 2.4 + cu12:
+#
+#   pip install "https://github.com/Dao-AILab/causal-conv1d/releases/download/v1.4.0/causal_conv1d-1.4.0+cu122torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl"
+#   pip install "https://github.com/state-spaces/mamba/releases/download/v2.2.2/mamba_ssm-2.2.2+cu122torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl"
+#   pip install transformers==4.43.3   # mamba-ssm 2.2.2 needs this older transformers
+#
+# (See README "Setup & Running". The cluster env `idbench` is already set up
+#  this way; `./benchmark_mamba_on_cluster.sh` runs all three there.)
+# ---------------------------------------------------------------------------

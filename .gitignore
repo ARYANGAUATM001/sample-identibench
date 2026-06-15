@@ -9,3 +9,8 @@ venv/
 .idea/
 *.pt
 *.pth
+.env
+
+# run artifacts
+logs/
+outputs/

@@ -4,6 +4,8 @@ import torch.nn as nn
 # TRUE Mamba-2 layer
 from mamba_ssm.modules.mamba2 import Mamba2
 
+from model.skip_utils import make_skip as _make_skip, apply_skip as _apply_skip
+
 
 # ============================================================
 # Mamba-2 Block
@@ -29,13 +31,22 @@ class Mamba2Block(nn.Module):
 
         # ----------------------------------------------------
         # True Mamba-2 SSD layer
+        #
+        # headdim is chosen so that nheads = expand*d_model/headdim
+        # is a multiple of 8. causal_conv1d's channel-last kernel
+        # otherwise raises a stride-alignment error (e.g. the default
+        # headdim=64 gives nheads=4 for d_model=128 and fails).
         # ----------------------------------------------------
+
+        d_inner = expand * d_model
+        headdim = d_inner // 8  # -> nheads = 8
 
         self.mamba = Mamba2(
             d_model=d_model,
             d_state=d_state,
             d_conv=d_conv,
             expand=expand,
+            headdim=headdim,
         )
 
         # ----------------------------------------------------
@@ -80,8 +91,13 @@ class Model(nn.Module):
         d_conv=4,
         num_classes=1,
         dropout=0.0,
+        use_skip=True,
+        bla_taps=0,
     ):
         super().__init__()
+
+        self.use_skip = use_skip
+        self.bla_taps = bla_taps
 
         # ----------------------------------------------------
         # Input projection
@@ -126,12 +142,19 @@ class Model(nn.Module):
             num_classes
         )
 
+        # Linear feed-through path (BLA): instantaneous or learnable causal FIR
+        # (bla_taps>1) so the SSM only learns the nonlinear residual.
+        if self.use_skip:
+            self.skip = _make_skip(input_dim, num_classes, bla_taps)
+
     def forward(self, x):
 
         """
         x shape:
             (B, L, input_dim)
         """
+
+        u = x
 
         # input projection
         x = self.input_proj(x)
@@ -143,8 +166,10 @@ class Model(nn.Module):
         # final norm
         x = self.final_norm(x)
 
-        # output projection
+        # output projection = nonlinear head (+ optional linear/BLA skip)
         x = self.head(x)
+        if self.use_skip:
+            x = x + _apply_skip(self.skip, self.bla_taps, u)
 
         # safe squeeze for regression/binary
         if x.shape[-1] == 1:
