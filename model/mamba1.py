@@ -3,6 +3,8 @@ import torch.nn as nn
 
 from mamba_ssm import Mamba
 
+from model.skip_utils import make_skip as _make_skip, apply_skip as _apply_skip
+
 
 # ============================================================
 # Mamba-1 Block (PreNorm + residual)
@@ -61,11 +63,13 @@ class Model(nn.Module):
         num_classes=1,
         dropout=0.0,
         use_skip=True,
+        bla_taps=0,
     ):
 
         super().__init__()
 
         self.use_skip = use_skip
+        self.bla_taps = bla_taps
 
         # Project dataset input features
         # into Mamba hidden dimension
@@ -96,13 +100,11 @@ class Model(nn.Module):
             num_classes
         )
 
-        # Direct linear feed-through (BLA-style): captures the linear u->y
-        # term so the SSM learns only the nonlinear residual. Starts near
-        # zero. Disable (use_skip=False) for resonators with no feed-through.
+        # Linear feed-through path (BLA): instantaneous, or a learnable causal
+        # FIR (bla_taps>1) that captures the linear dynamics so the SSM learns
+        # only the nonlinear residual. Disable for resonators (use_skip=False).
         if self.use_skip:
-            self.skip = nn.Linear(input_dim, num_classes)
-            nn.init.zeros_(self.skip.weight)
-            nn.init.zeros_(self.skip.bias)
+            self.skip = _make_skip(input_dim, num_classes, bla_taps)
 
     def forward(self, x):
 
@@ -116,10 +118,10 @@ class Model(nn.Module):
 
         x = self.final_norm(x)
 
-        # (B, L, num_classes) = nonlinear head (+ optional linear skip)
+        # (B, L, num_classes) = nonlinear head (+ optional linear/BLA skip)
         x = self.head(x)
         if self.use_skip:
-            x = x + self.skip(u)
+            x = x + _apply_skip(self.skip, self.bla_taps, u)
 
         # (B, L) for regression
         if x.shape[-1] == 1:

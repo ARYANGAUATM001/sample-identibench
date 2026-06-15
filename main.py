@@ -278,6 +278,8 @@ def build_model(context):
 
         use_skip=config.get("use_skip", True),
 
+        bla_taps=config.get("bla_taps", 0),
+
     ).to(device)
 
     # --------------------------------------------------------
@@ -470,6 +472,12 @@ if __name__ == "__main__":
         # physics for a resonator (Silverbox has no instantaneous feed-through)
         # -> set IDB_SKIP=0 for Silverbox.
         "use_skip": os.environ.get("IDB_SKIP", "1") == "1",
+
+        # BLA path: if >1, the skip is a learnable linear FIR filter of this
+        # many taps (a Best-Linear-Approximation of the dynamics) instead of an
+        # instantaneous linear term. The SSM then learns only the nonlinear
+        # residual -> the WH-SOTA recipe. e.g. IDB_BLA_TAPS=512.
+        "bla_taps": int(os.environ.get("IDB_BLA_TAPS", "0")),
 
         # Train long enough to actually converge (the few-second
         # runs were badly undertrained). env-overridable.

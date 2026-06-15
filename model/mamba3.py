@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from model.skip_utils import make_skip as _make_skip, apply_skip as _apply_skip
+
 
 # ============================================================
 # Utilities
@@ -458,11 +460,13 @@ class Model(nn.Module):
         expand=4,
         num_classes=1,
         use_skip=True,
+        bla_taps=0,
     ):
 
         super().__init__()
 
         self.use_skip = use_skip
+        self.bla_taps = bla_taps
 
         # ----------------------------------------------------
         # Input projection
@@ -505,12 +509,10 @@ class Model(nn.Module):
             num_classes
         )
 
-        # Direct linear feed-through (BLA-style): captures the linear
-        # input->output term so the SSM only learns the nonlinear residual.
+        # Linear feed-through path (BLA): instantaneous or learnable causal FIR
+        # (bla_taps>1) so the SSM only learns the nonlinear residual.
         if self.use_skip:
-            self.skip = nn.Linear(input_dim, num_classes)
-            nn.init.zeros_(self.skip.weight)
-            nn.init.zeros_(self.skip.bias)
+            self.skip = _make_skip(input_dim, num_classes, bla_taps)
 
     def forward(self, x):
 
@@ -530,7 +532,7 @@ class Model(nn.Module):
 
         x = self.head(x)
         if self.use_skip:
-            x = x + self.skip(u)
+            x = x + _apply_skip(self.skip, self.bla_taps, u)
 
         if x.shape[-1] == 1:
             x = x.squeeze(-1)

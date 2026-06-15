@@ -4,6 +4,8 @@ import torch.nn as nn
 # TRUE Mamba-2 layer
 from mamba_ssm.modules.mamba2 import Mamba2
 
+from model.skip_utils import make_skip as _make_skip, apply_skip as _apply_skip
+
 
 # ============================================================
 # Mamba-2 Block
@@ -90,10 +92,12 @@ class Model(nn.Module):
         num_classes=1,
         dropout=0.0,
         use_skip=True,
+        bla_taps=0,
     ):
         super().__init__()
 
         self.use_skip = use_skip
+        self.bla_taps = bla_taps
 
         # ----------------------------------------------------
         # Input projection
@@ -138,12 +142,10 @@ class Model(nn.Module):
             num_classes
         )
 
-        # Direct linear feed-through (BLA-style): captures the linear
-        # input->output term so the SSM only learns the nonlinear residual.
+        # Linear feed-through path (BLA): instantaneous or learnable causal FIR
+        # (bla_taps>1) so the SSM only learns the nonlinear residual.
         if self.use_skip:
-            self.skip = nn.Linear(input_dim, num_classes)
-            nn.init.zeros_(self.skip.weight)
-            nn.init.zeros_(self.skip.bias)
+            self.skip = _make_skip(input_dim, num_classes, bla_taps)
 
     def forward(self, x):
 
@@ -164,10 +166,10 @@ class Model(nn.Module):
         # final norm
         x = self.final_norm(x)
 
-        # output projection = nonlinear head (+ optional linear skip)
+        # output projection = nonlinear head (+ optional linear/BLA skip)
         x = self.head(x)
         if self.use_skip:
-            x = x + self.skip(u)
+            x = x + _apply_skip(self.skip, self.bla_taps, u)
 
         # safe squeeze for regression/binary
         if x.shape[-1] == 1:
