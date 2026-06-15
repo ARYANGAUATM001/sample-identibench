@@ -112,43 +112,43 @@ Each run writes a timestamped folder `logs/<date_time>_<model>/` (full
 
 ## 📊 Results
 
-Results in the **IdentiBench results-table format** (`metric_score` = RMSE in
-**mV**; `NaN` where a column doesn't apply to that benchmark). Values are the
-mean over repeats (mamba1/mamba2: 2; mamba3: 1). The `seed` and `hyperparameters`
-columns are omitted for width (config below).
+Raw `run_benchmarks` output, in the **exact IdentiBench results-table format**
+(`metric_score` = RMSE in **mV**; per-run rows; `NaN` where a column doesn't
+apply). `hyperparameters` is shown as `{…}` (the full config is below).
 
-**Reference — IdentiBench "predict-the-mean" baseline** (from their README):
+**mamba1 (`Mamba`)** — `run_benchmarks({Silverbox_Sim, WH_Sim}, n_times=2)`:
 
-| benchmark_name | datasets | training_time_seconds | test_time_seconds | benchmark_type | metric_name | metric_score | test_sets.test.rmse_mV | test_sets.multisine.rmse_mV | test_sets.arrow_full.rmse_mV | test_sets.arrow_no_extrapolation.rmse_mV |
-|---|---|---|---|---|---|---|---|---|---|---|
-| BenchmarkSilverbox_Simulation | [silverbox] | 2.84 | 1.25 | Simulation | rmse_mV | 8.50 | NaN | 8.50 | 16.15 | 7.54 |
-| BenchmarkWH_Simulation | [wh] | 4.94 | 1.01 | Simulation | rmse_mV | 42.16 | 42.16 | NaN | NaN | NaN |
+|  | benchmark_name | datasets | hyperparameters | seed | training_time_seconds | test_time_seconds | benchmark_type | metric_name | metric_score | test_sets.test.rmse_mV | test_sets.multisine.rmse_mV | test_sets.arrow_full.rmse_mV | test_sets.arrow_no_extrapolation.rmse_mV |
+|----|----|----|----|----|----|----|----|----|----|----|----|----|----|
+| 0 | BenchmarkSilverbox_Simulation | [silverbox] | {…} | 1341053471 | 196.163555 | 0.126908 | Simulation | rmse_mV | 11.825907 | NaN | 11.825907 | 15.999990 | 10.688920 |
+| 1 | BenchmarkWH_Simulation | [wh] | {…} | 4074319568 | 320.079093 | 0.063764 | Simulation | rmse_mV | 2.943630 | 2.943630 | NaN | NaN | NaN |
+| 2 | BenchmarkSilverbox_Simulation | [silverbox] | {…} | 4057141470 | 198.352650 | 0.078795 | Simulation | rmse_mV | 13.111735 | NaN | 13.111735 | 16.830286 | 11.443976 |
+| 3 | BenchmarkWH_Simulation | [wh] | {…} | 2663541626 | 322.457356 | 0.064260 | Simulation | rmse_mV | 3.448275 | 3.448275 | NaN | NaN | NaN |
 
-**mamba1 (`Mamba`):**
+**mamba2 (`Mamba2`)** — `run_benchmarks({Silverbox_Sim, WH_Sim}, n_times=2)`:
 
-| benchmark_name | datasets | training_time_seconds | test_time_seconds | benchmark_type | metric_name | metric_score | test_sets.test.rmse_mV | test_sets.multisine.rmse_mV | test_sets.arrow_full.rmse_mV | test_sets.arrow_no_extrapolation.rmse_mV |
-|---|---|---|---|---|---|---|---|---|---|---|
-| BenchmarkSilverbox_Simulation | [silverbox] | 197.26 | 0.10 | Simulation | rmse_mV | 12.47 | NaN | 12.47 | 16.42 | 11.07 |
-| BenchmarkWH_Simulation | [wh] | 321.27 | 0.06 | Simulation | rmse_mV | 3.20 | 3.20 | NaN | NaN | NaN |
+|  | benchmark_name | datasets | hyperparameters | seed | training_time_seconds | test_time_seconds | benchmark_type | metric_name | metric_score | test_sets.test.rmse_mV | test_sets.multisine.rmse_mV | test_sets.arrow_full.rmse_mV | test_sets.arrow_no_extrapolation.rmse_mV |
+|----|----|----|----|----|----|----|----|----|----|----|----|----|----|
+| 0 | BenchmarkSilverbox_Simulation | [silverbox] | {…} | 1555265017 | 161.743054 | 3.087448 | Simulation | rmse_mV | 18.135590 | NaN | 18.135590 | 21.308233 | 15.788944 |
+| 1 | BenchmarkWH_Simulation | [wh] | {…} | 3009121841 | 234.141951 | 0.026385 | Simulation | rmse_mV | 3.064139 | 3.064139 | NaN | NaN | NaN |
+| 2 | BenchmarkSilverbox_Simulation | [silverbox] | {…} | 1548472515 | 145.507850 | 0.036629 | Simulation | rmse_mV | 17.751791 | NaN | 17.751791 | 20.865816 | 14.449530 |
+| 3 | BenchmarkWH_Simulation | [wh] | {…} | 2827909812 | 237.671578 | 0.026185 | Simulation | rmse_mV | 3.496573 | 3.496573 | NaN | NaN | NaN |
 
-**mamba2 (`Mamba2`):**
+**mamba3 (custom, reduced — experimental)** — `run_benchmarks({Silverbox_Sim, WH_Sim}, n_times=1)`:
 
-| benchmark_name | datasets | training_time_seconds | test_time_seconds | benchmark_type | metric_name | metric_score | test_sets.test.rmse_mV | test_sets.multisine.rmse_mV | test_sets.arrow_full.rmse_mV | test_sets.arrow_no_extrapolation.rmse_mV |
-|---|---|---|---|---|---|---|---|---|---|---|
-| BenchmarkSilverbox_Simulation | [silverbox] | 153.63 | 1.56 | Simulation | rmse_mV | 17.94 | NaN | 17.94 | 21.09 | 15.12 |
-| BenchmarkWH_Simulation | [wh] | 235.91 | 0.03 | Simulation | rmse_mV | 3.28 | 3.28 | NaN | NaN | NaN |
+|  | benchmark_name | datasets | hyperparameters | seed | training_time_seconds | test_time_seconds | benchmark_type | metric_name | metric_score | test_sets.test.rmse_mV | test_sets.multisine.rmse_mV | test_sets.arrow_full.rmse_mV | test_sets.arrow_no_extrapolation.rmse_mV |
+|----|----|----|----|----|----|----|----|----|----|----|----|----|----|
+| 0 | BenchmarkSilverbox_Simulation | [silverbox] | {…} | 2783790788 | 900.726019 | 86.725079 | Simulation | rmse_mV | 48.898983 | NaN | 48.898983 | 48.393353 | 38.760036 |
+| 1 | BenchmarkWH_Simulation | [wh] | {…} | 2550957426 | 1445.559718 | 75.573285 | Simulation | rmse_mV | 175.653503 | 175.653503 | NaN | NaN | NaN |
 
-**mamba3 (custom, reduced — experimental):**
+For comparison, the IdentiBench README's **"predict-the-mean" baseline** scores
+`WH = 42.16` and `Silverbox = 8.50 / 16.15 / 7.54` mV; SOTA
+(nonlinearbenchmark.org) is WH ~0.2–0.3 mV, Silverbox sub-mV.
 
-| benchmark_name | datasets | training_time_seconds | test_time_seconds | benchmark_type | metric_name | metric_score | test_sets.test.rmse_mV | test_sets.multisine.rmse_mV | test_sets.arrow_full.rmse_mV | test_sets.arrow_no_extrapolation.rmse_mV |
-|---|---|---|---|---|---|---|---|---|---|---|
-| BenchmarkSilverbox_Simulation | [silverbox] | 900.73 | 86.73 | Simulation | rmse_mV | 48.90 | NaN | 48.90 | 48.39 | 38.76 |
-| BenchmarkWH_Simulation | [wh] | 1445.56 | 75.57 | Simulation | rmse_mV | 175.65 | 175.65 | NaN | NaN | NaN |
-
-_SOTA (nonlinearbenchmark.org): WH ~0.2–0.3 mV, Silverbox sub-mV._
-
-Config: `seq_len=1024`, `washout=100`, `batch_size=32`, bf16 + TF32, EMA off,
-cosine LR, AdamW. Training is ~3–4 min per model per repeat (no longer seconds).
+Config (the `{…}` above): `hidden_dim=128`, `d_state=64`, `n_layers=6`
+(mamba3: 1), `epochs=80` (mamba3: 4), `seq_len=1024`, `washout=100`,
+`batch_size=32`, `lr=1e-3`, `weight_decay=1e-2`, `amp='bf16'`, EMA off,
+cosine LR, AdamW.
 
 ### Fix vs. the earlier (broken) results
 
