@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-from mamba_ssm import Mamba
+from mamba_ssm import Mamba2
+
 
 class Model(nn.Module):
 
@@ -12,12 +13,12 @@ class Model(nn.Module):
         self.norm1 = nn.LayerNorm(128)
         self.norm2 = nn.LayerNorm(128)
 
-        self.mamba1 = Mamba(
+        self.mamba1 = Mamba2(
             d_model=128,
             d_state=64
         )
 
-        self.mamba2 = Mamba(
+        self.mamba2 = Mamba2(
             d_model=128,
             d_state=64
         )
@@ -32,13 +33,11 @@ class Model(nn.Module):
 
         x = self.input_proj(x)
 
-        # First Mamba Block
         residual = x
         x = self.norm1(x)
         x = self.mamba1(x)
         x = x + residual
 
-        # Second Mamba Block
         residual = x
         x = self.norm2(x)
         x = self.mamba2(x)
