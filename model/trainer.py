@@ -67,8 +67,7 @@ def train_model(
                 if y.ndim == 3:
                     y = y.squeeze(-1)
 
-                y_prev = torch.zeros_like(y)
-                y_prev[:, 1:] = y[:, :-1]
+                y_prev = torch.zeros_like(y
 
                 pred = model(u, y_prev)
 
