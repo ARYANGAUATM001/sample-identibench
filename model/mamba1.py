@@ -7,31 +7,35 @@ from mamba_ssm import Mamba
 class Model(nn.Module):
 
     def __init__(
-            self,
-            input_dim=1,
-            d_model=16,
-            num_classes=1
+        self,
+        input_dim=1,
+        d_model=128,
+        d_state=64,
+        n_layers=6,
+        num_classes=1,
     ):
-
         super().__init__()
 
-        # Project dataset input features
-        # into Mamba hidden dimension
+        # Input projection
         self.input_proj = nn.Linear(
             input_dim,
             d_model
         )
 
-        # Single Mamba block
-        # closest to original baseline idea
-        self.mamba = Mamba(
-            d_model=d_model,
-            d_state=16,
-            d_conv=4,
-            expand=2,
+        # Stacked Mamba layers
+        self.layers = nn.ModuleList(
+            [
+                Mamba(
+                    d_model=d_model,
+                    d_state=d_state,
+                    d_conv=4,
+                    expand=2,
+                )
+                for _ in range(n_layers)
+            ]
         )
 
-        # Output prediction head
+        # Output head
         self.head = nn.Linear(
             d_model,
             num_classes
@@ -43,10 +47,14 @@ class Model(nn.Module):
         x = self.input_proj(x)
 
         # (B, L, d_model)
-        x = self.mamba(x)
+        for layer in self.layers:
+            x = layer(x)
 
         # (B, L, 1)
         x = self.head(x)
 
         # (B, L)
-        return x.squeeze(-1)
+        if x.shape[-1] == 1:
+            x = x.squeeze(-1)
+
+        return x
