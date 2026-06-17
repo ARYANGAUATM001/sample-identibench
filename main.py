@@ -246,21 +246,58 @@ def build_model(context):
                 enabled=device.type == "cuda"
             ):
 
-                # Current Mamba1/Mamba2 models use:
-                #
-                #     y_t = f(u_1:t)
-                #
-                # and do not consume y_init.
-                #
-                # Therefore we ignore y_init instead of
-                # constructing an artificial warmup.
+                seq_len = u_test.shape[0]
 
-                pred = model(
-                    u_test.unsqueeze(0)
+
+                if y_init is None:
+
+                prev_y = torch.zeros(
+                    1,
+                    device=device
                 )
 
-                y_pred = pred.squeeze(0)
+               else:
+                   
+                   
 
+                   y_init = torch.as_tensor(
+                    y_init,
+                    dtype=torch.float32,
+                    device=device
+                ).reshape(-1)
+
+                   prev_y = y_init[-1:]
+
+                predictions = []
+
+                for t in range(seq_len):
+                    u_t = (
+                    u_test[t:t + 1]
+                    .unsqueeze(0)
+                    )
+
+                    y_prev_t = (
+                    prev_y
+                    .view(1, 1)
+                    )
+
+                    pred_t = model(
+                    u_t,
+                    y_prev_t
+                    )
+                    
+                    pred_t = pred_t.reshape(-1)
+                    predictions.append(
+                    pred_t
+                    )
+        
+                    prev_y = pred_t
+
+                y_pred = torch.cat(
+                predictions,
+                dim=0
+            )
+        
         return (
 
             y_pred
