@@ -40,9 +40,23 @@ def train_model(
     # Scheduler
     # ========================================================
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    scheduler = torch.optim.lr_scheduler.SequentialLR(
         optimizer,
-        T_max=config["epochs"]
+        schedulers=[
+            torch.optim.lr_scheduler.LinearLR(
+                optimizer,
+                start_factor=0.1,
+                total_iters=5
+            ),
+            torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer,
+                T_max=max(
+                    config["epochs"] - 5,
+                    1
+                )
+            )
+        ],
+        milestones=[5]
     )
 
     # ========================================================
@@ -148,7 +162,7 @@ def train_model(
 
             torch.nn.utils.clip_grad_norm_(
                 model.parameters(),
-                max_norm=1.0
+                max_norm=5.0
             )
 
             scaler.step(optimizer)
