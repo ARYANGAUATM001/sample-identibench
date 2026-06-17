@@ -4,47 +4,15 @@ import torch.nn as nn
 from mamba_ssm import Mamba
 
 
-class MambaBlock(nn.Module):
-
-    def __init__(
-        self,
-        d_model,
-        d_state,
-        d_conv=4,
-        expand=2,
-    ):
-        super().__init__()
-
-        self.norm = nn.RMSNorm(d_model)
-
-        self.mamba = Mamba(
-            d_model=d_model,
-            d_state=d_state,
-            d_conv=d_conv,
-            expand=expand,
-        )
-
-    def forward(self, x):
-
-        residual = x
-
-        x = self.norm(x)
-
-        x = self.mamba(x)
-
-        return x + residual
-
-
 class Model(nn.Module):
 
     def __init__(
         self,
         input_dim=1,
-        d_model=128,
-        d_state=64,
-        n_layers=6,
-        num_classes=1,
+        d_model=64,
+        num_classes=1
     ):
+
         super().__init__()
 
         self.input_proj = nn.Linear(
@@ -52,18 +20,15 @@ class Model(nn.Module):
             d_model
         )
 
-        self.layers = nn.ModuleList(
-            [
-                MambaBlock(
-                    d_model=d_model,
-                    d_state=d_state,
-                )
-                for _ in range(n_layers)
-            ]
+        self.norm = nn.LayerNorm(
+            d_model
         )
 
-        self.final_norm = nn.RMSNorm(
-            d_model
+        self.mamba = Mamba(
+            d_model=d_model,
+            d_state=16,
+            d_conv=4,
+            expand=2,
         )
 
         self.head = nn.Linear(
@@ -73,16 +38,22 @@ class Model(nn.Module):
 
     def forward(self, x):
 
+        # (B, L, input_dim)
         x = self.input_proj(x)
 
-        for layer in self.layers:
-            x = layer(x)
+        # residual branch
+        residual = x
 
-        x = self.final_norm(x)
+        # pre-norm
+        x = self.norm(x)
 
+        # mamba block
+        x = self.mamba(x)
+
+        # residual connection
+        x = x + residual
+
+        # prediction head
         x = self.head(x)
 
-        if x.shape[-1] == 1:
-            x = x.squeeze(-1)
-
-        return x
+        return x.squeeze(-1)
