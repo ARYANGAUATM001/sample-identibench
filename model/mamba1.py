@@ -1,84 +1,24 @@
 import torch
 import torch.nn as nn
-
 from mamba_ssm import Mamba
-
 
 class Model(nn.Module):
 
-    def __init__(
-        self,
-        input_dim=1,
-        d_model=128,
-        d_state=64,
-        n_layers=4,
-        num_classes=1
-    ):
-
+    def __init__(self):
         super().__init__()
 
-        # ----------------------------------------
-        # u + previous y
-        # ----------------------------------------
+        self.input_layer = nn.Linear(2, 128)
+        self.mamba = Mamba(d_model=128)
+        self.output_layer = nn.Linear(128, 1)
 
-        self.input_proj = nn.Linear(
-            input_dim + 1,
-            d_model
-        )
+    def forward(self, u, y_prev):
 
-        self.layers = nn.ModuleList(
-            [
-                Mamba(
-                    d_model=d_model,
-                    d_state=d_state,
-                    d_conv=4,
-                    expand=2
-                )
-                for _ in range(n_layers)
-            ]
-        )
+        y_prev = y_prev.unsqueeze(-1)
 
-        self.norms = nn.ModuleList(
-            [
-                nn.LayerNorm(d_model)
-                for _ in range(n_layers)
-            ]
-        )
+        x = torch.cat([u, y_prev], dim=-1)
 
-        self.head = nn.Linear(
-            d_model,
-            num_classes
-        )
+        x = self.input_layer(x)
 
-    def forward(
-        self,
-        u,
-        y_prev
-    ):
-        """
-        u       : (B,L,input_dim)
-        y_prev  : (B,L)
-        """
+        x = self.mamba(x)
 
-        if y_prev.ndim == 2:
-            y_prev = y_prev.unsqueeze(-1)
-
-        x = torch.cat(
-            [u, y_prev],
-            dim=-1
-        )
-
-        x = self.input_proj(x)
-
-        for norm, layer in zip(
-            self.norms,
-            self.layers
-        ):
-            residual = x
-            x = norm(x)
-            x = layer(x)
-            x = x + residual
-
-        x = self.head(x)
-
-        return x.squeeze(-1)
+        return self.output_layer(x).squeeze(-1)
