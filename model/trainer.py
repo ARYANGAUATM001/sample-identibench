@@ -13,7 +13,8 @@ def train_model(
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=config["lr"]
+        lr=config["lr"],
+        weight_decay=config["weight_decay"]
     )
 
     loss_fn = nn.MSELoss()
@@ -46,6 +47,11 @@ def train_model(
             loss = loss_fn(pred, y)
 
             loss.backward()
+
+            torch.nn.utils.clip_grad_norm_(
+                 model.parameters(),
+                 config["grad_clip"]
+                  )
 
             optimizer.step()
 
