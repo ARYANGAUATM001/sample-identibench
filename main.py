@@ -219,7 +219,8 @@ def build_model(context):
 
     def predictor(
         u_test,
-        y_init=None
+        y_init=None,
+        attrs=None
     ):
 
         model.eval()
@@ -245,62 +246,20 @@ def build_model(context):
                 enabled=device.type == "cuda"
             ):
 
-                # ============================================
-                # Warmup handling
-                # ============================================
+                # Current Mamba1/Mamba2 models use:
+                #
+                #     y_t = f(u_1:t)
+                #
+                # and do not consume y_init.
+                #
+                # Therefore we ignore y_init instead of
+                # constructing an artificial warmup.
 
-                if y_init is not None:
+                pred = model(
+                    u_test.unsqueeze(0)
+                )
 
-                    y_init = torch.as_tensor(
-                        y_init,
-                        dtype=torch.float32,
-                        device=device
-                    )
-
-                    warm_len = len(y_init)
-
-                    # ----------------------------------------
-                    # Approximate warmup
-                    #
-                    # Since current models are:
-                    # y_t = f(u_1:t)
-                    #
-                    # and NOT autoregressive on y,
-                    # we warmup hidden states using
-                    # zero-input prefix.
-                    # ----------------------------------------
-
-                    u_warm = torch.zeros(
-
-                        (
-                            warm_len,
-                            u_test.shape[-1]
-                        ),
-
-                        dtype=torch.float32,
-                        device=device
-                    )
-
-                    u_full = torch.cat(
-                        [u_warm, u_test],
-                        dim=0
-                    )
-
-                    pred = model(
-                        u_full.unsqueeze(0)
-                    )
-
-                    pred = pred.squeeze(0)
-
-                    y_pred = pred[warm_len:]
-
-                else:
-
-                    pred = model(
-                        u_test.unsqueeze(0)
-                    )
-
-                    y_pred = pred.squeeze(0)
+                y_pred = pred.squeeze(0)
 
         return (
 
