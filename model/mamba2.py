@@ -7,12 +7,7 @@ class Model(nn.Module):
 
      def __init__(
         self,
-        input_dim=1,
-        d_model=128,
-        d_state=64,
-        n_layers=2,
-        num_classes=1
-    ):
+        input_dim
 
         self.input_proj = nn.Linear(2, 128)
 
@@ -21,8 +16,7 @@ class Model(nn.Module):
 
         self.mamba1 = Mamba2(
             d_model=128,
-            d_state=64
-        )
+            d_state
 
         self.mamba2 = Mamba2(
             d_model=128,
@@ -33,9 +27,9 @@ class Model(nn.Module):
 
     def forward(self, u, y_prev):
 
-        y_prev = y_prev.unsqueeze(-1)
+     y_prev = y_prev.unsqueeze(-1)
 
-        x = torch.cat([u, y_prev], dim=-1)
+     x = torch.cat([u, y_prev], dim=-1)
 
         x = self.input_proj(x)
 
