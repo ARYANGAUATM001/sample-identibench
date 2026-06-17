@@ -6,15 +6,7 @@ The goal is to compare training efficiency, prediction accuracy, stability, and 
 
 ---
 
-# 📌 Overview
 
-We compare the following models:
-
-- Mamba
-- Mamba2
-- Mamba3
-
-These models are evaluated on standard nonlinear system identification benchmarks using repeated experiments.
 
 ---
 # ⚙️ Setup
@@ -87,8 +79,6 @@ This will:
 ### 🔹 Mamba2 Results
 ![Mamba2 Results](utils/output2.png)
 
-###  Mamba3
-![Mamba3 Results](utils/output3.png)
 
 
 
@@ -107,52 +97,9 @@ This will:
 
 - Reliable baseline performance
 
-
-### Mamba3
-
-- Higher model capacity
-
-
 ---
 
-## 2. Stability Across Runs
-
-### Mamba1
-
-- Most stable training behavior
-- Lower variance across repeated experiments
-- Consistent benchmark outputs
-
-### Mamba2
-
-- Good repeatability
-- Stable convergence during training
-
-### Mamba3
-
-- Higher variance due to increased model complexity
-- More sensitive to hyperparameter settings
-
----
-
-## 3. Training Efficiency
-
-### Mamba2
-
-- Fastest benchmark execution
-- Lower inference overhead
-- Efficient training-performance tradeoff
-
-### Mamba1
-
-- Moderate computational cost
-- Good efficiency for baseline experiments
-
-### Mamba3
-
-- Highest computational overhead
-- Longer training duration
-- Increased resource consumption
+## 
 
 ---
 
@@ -166,12 +113,12 @@ This will:
 
 - Lower `metric_score` indicates better benchmark performance
 - Lower RMSE values correspond to improved prediction quality
-- Smaller standard deviation indicates more stable training behavior
+
 
 NaN values may appear because:
 
 - Certain datasets do not compute specific metrics
-- Some extrapolation benchmarks may not apply to all runs
+  
 
 ---
 
@@ -179,11 +126,6 @@ NaN values may appear because:
 
 This project demonstrates the effectiveness of Mamba-based architectures for nonlinear system identification using the IdentiBench framework.
 
-Key observations:
-
-- Mamba2 produced the strongest practical benchmark performance
-- Mamba1 serves as an efficient lightweight baseline
-- Mamba3 offers higher modeling capacity but requires additional optimization
 
 The ideal model choice depends on:
 
