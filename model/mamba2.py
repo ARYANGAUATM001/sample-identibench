@@ -16,8 +16,12 @@ class Model(nn.Module):
     ):
         super().__init__()
 
+        # --------------------------------------------------
+        # Input = [u_t , y_{t-1}]
+        # --------------------------------------------------
+
         self.input_proj = nn.Linear(
-            input_dim,
+            input_dim + 1,
             d_model
         )
 
@@ -49,12 +53,34 @@ class Model(nn.Module):
             num_classes
         )
 
-    def forward(self, x):
+    def forward(
+        self,
+        u,
+        y_prev
+    ):
+        """
+        u       : (B, L, input_dim)
+        y_prev  : (B, L)
+        """
 
-        # (B, L, input_dim)
+        if y_prev.ndim == 2:
+            y_prev = y_prev.unsqueeze(-1)
+
+        # --------------------------------------------------
+        # Concatenate previous output history
+        # --------------------------------------------------
+
+        x = torch.cat(
+            [u, y_prev],
+            dim=-1
+        )
+
         x = self.input_proj(x)
 
+        # --------------------------------------------------
         # Residual Mamba stack
+        # --------------------------------------------------
+
         for norm, layer in zip(
             self.norms,
             self.layers
@@ -70,7 +96,6 @@ class Model(nn.Module):
 
         x = self.final_norm(x)
 
-        # (B, L, 1)
         x = self.head(x)
 
         return x.squeeze(-1)
