@@ -225,17 +225,12 @@ def build_model(context):
 
         model.eval()
 
-        # ----------------------------------------------------
-        # Convert input
-        # ----------------------------------------------------
-
         u_test = torch.as_tensor(
             u_test,
             dtype=torch.float32,
             device=device
         )
 
-        # ensure feature dimension
         if u_test.ndim == 1:
             u_test = u_test.unsqueeze(-1)
 
@@ -248,65 +243,71 @@ def build_model(context):
 
                 seq_len = u_test.shape[0]
 
+                # ----------------------------------------
+                # Initialize from benchmark warmup
+                # ----------------------------------------
 
                 if y_init is None:
 
-                prev_y = torch.zeros(
-                    1,
-                    device=device
-                )
+                    prev_y = torch.zeros(
+                        1,
+                        dtype=torch.float32,
+                        device=device
+                    )
 
-               else:
-                   
-                   
+                else:
 
-                   y_init = torch.as_tensor(
-                    y_init,
-                    dtype=torch.float32,
-                    device=device
-                ).reshape(-1)
+                    y_init = torch.as_tensor(
+                        y_init,
+                        dtype=torch.float32,
+                        device=device
+                    ).reshape(-1)
 
-                   prev_y = y_init[-1:]
+                    prev_y = y_init[-1:]
 
                 predictions = []
 
+                # ----------------------------------------
+                # Autoregressive rollout
+                # ----------------------------------------
+
                 for t in range(seq_len):
+
                     u_t = (
-                    u_test[t:t + 1]
-                    .unsqueeze(0)
+                        u_test[t:t + 1]
+                        .unsqueeze(0)
                     )
 
-                    y_prev_t = (
-                    prev_y
-                    .view(1, 1)
+                    y_prev_t = prev_y.view(
+                        1,
+                        1
                     )
 
                     pred_t = model(
-                    u_t,
-                    y_prev_t
+                        u_t,
+                        y_prev_t
                     )
-                    
+
                     pred_t = pred_t.reshape(-1)
+
                     predictions.append(
-                    pred_t
+                        pred_t
                     )
-        
+
                     prev_y = pred_t
 
                 y_pred = torch.cat(
-                predictions,
-                dim=0
-            )
-        
-        return (
+                    predictions,
+                    dim=0
+                )
 
+        return (
             y_pred
             .detach()
             .float()
             .cpu()
             .numpy()
             .reshape(-1, 1)
-
         )
 
     return predictor
@@ -358,7 +359,6 @@ if __name__ == "__main__":
 
         build_model=build_model,
 
-        # more stable statistics
         n_times=5,
 
         hyperparameters={
@@ -369,7 +369,7 @@ if __name__ == "__main__":
 
             "n_layers": 6,
 
-            "epochs": 10,
+            "epochs": 100,
 
             "lr": 1e-3,
 
