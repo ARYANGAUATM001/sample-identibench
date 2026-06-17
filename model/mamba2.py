@@ -5,8 +5,14 @@ from mamba_ssm import Mamba2
 
 class Model(nn.Module):
 
-    def __init__(self):
-        super().__init__()
+     def __init__(
+        self,
+        input_dim=1,
+        d_model=128,
+        d_state=64,
+        n_layers=2,
+        num_classes=1
+    ):
 
         self.input_proj = nn.Linear(2, 128)
 
