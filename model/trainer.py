@@ -30,6 +30,7 @@ def train_model(
         model.train()
 
         for u, y, _ in train_data:
+            
 
             u = u.float().to(device)
             y = y.float().to(device)
@@ -47,13 +48,6 @@ def train_model(
             loss = loss_fn(pred, y)
 
             loss.backward()
-
-            torch.nn.utils.clip_grad_norm_(
-                 model.parameters(),
-                 config["grad_clip"]
-                  )
-
-            optimizer.step()
 
         # -------------------------
         # VALIDATION
