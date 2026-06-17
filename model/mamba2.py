@@ -9,7 +9,15 @@ class Model(nn.Module):
 
         self.input_proj = nn.Linear(2, 128)
 
-        self.mamba = Mamba(
+        self.norm1 = nn.LayerNorm(128)
+        self.norm2 = nn.LayerNorm(128)
+
+        self.mamba1 = Mamba(
+            d_model=128,
+            d_state=64
+        )
+
+        self.mamba2 = Mamba(
             d_model=128,
             d_state=64
         )
@@ -24,7 +32,17 @@ class Model(nn.Module):
 
         x = self.input_proj(x)
 
-        x = self.mamba(x)
+        # First Mamba Block
+        residual = x
+        x = self.norm1(x)
+        x = self.mamba1(x)
+        x = x + residual
+
+        # Second Mamba Block
+        residual = x
+        x = self.norm2(x)
+        x = self.mamba2(x)
+        x = x + residual
 
         x = self.output(x)
 
