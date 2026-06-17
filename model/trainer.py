@@ -20,7 +20,6 @@ def train_model(
 
     model = model.to(device)
 
-    # Optional PyTorch 2.x compile
     if config.get("compile", False):
         model = torch.compile(model)
 
@@ -31,7 +30,10 @@ def train_model(
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=config["lr"],
-        weight_decay=config.get("weight_decay", 1e-2)
+        weight_decay=config.get(
+            "weight_decay",
+            1e-2
+        )
     )
 
     # ========================================================
@@ -50,7 +52,7 @@ def train_model(
     loss_fn = nn.MSELoss()
 
     # ========================================================
-    # Mixed precision
+    # AMP
     # ========================================================
 
     scaler = GradScaler(
@@ -58,14 +60,15 @@ def train_model(
     )
 
     # ========================================================
-    # Config
+    # Checkpointing
     # ========================================================
-
-    seq_len = config.get("seq_len", 100)
 
     save_dir = f"outputs/{model_name}"
 
-    os.makedirs(save_dir, exist_ok=True)
+    os.makedirs(
+        save_dir,
+        exist_ok=True
+    )
 
     best_valid_loss = float("inf")
 
@@ -86,23 +89,14 @@ def train_model(
 
         for (u, y, _) in train_data:
 
-            # ------------------------------------------------
-            # Tensor conversion
-            # ------------------------------------------------
-
             u = u.float()
             y = y.float()
 
-            # ------------------------------------------------
-            # Target shape fix
-            # ------------------------------------------------
-
-            if y.ndim == 3 and y.shape[-1] == 1:
+            if (
+                y.ndim == 3
+                and y.shape[-1] == 1
+            ):
                 y = y.squeeze(-1)
-
-            # ------------------------------------------------
-            # Ensure batch dimension
-            # ------------------------------------------------
 
             if u.ndim == 2:
                 u = u.unsqueeze(0)
@@ -110,84 +104,63 @@ def train_model(
             if y.ndim == 1:
                 y = y.unsqueeze(0)
 
-            # ------------------------------------------------
-            # Sequence chunking
-            # Shape:
-            # u = (B, L, D)
-            # y = (B, L)
-            # ------------------------------------------------
+            u = u.to(
+                device,
+                non_blocking=True
+            )
 
-            seq_total = u.shape[1]
+            y = y.to(
+                device,
+                non_blocking=True
+            )
 
-            for i in range(0, seq_total, seq_len):
+            optimizer.zero_grad(
+                set_to_none=True
+            )
 
-                u_batch = (
-                    u[:, i:i + seq_len]
-                    .to(device, non_blocking=True)
-                )
+            with autocast(
+                device_type=device.type,
+                enabled=device.type == "cuda"
+            ):
 
-                y_batch = (
-                    y[:, i:i + seq_len]
-                    .to(device, non_blocking=True)
-                )
+                pred = model(u)
 
-                optimizer.zero_grad(
-                    set_to_none=True
-                )
-
-                # --------------------------------------------
-                # Forward
-                # --------------------------------------------
-
-                with autocast(
-                    device_type=device.type,
-                    enabled=device.type == "cuda"
+                if (
+                    pred.ndim == 3
+                    and pred.shape[-1] == 1
                 ):
+                    pred = pred.squeeze(-1)
 
-                    pred = model(u_batch)
-
-                    # safe squeeze
-                    if pred.ndim == 3 and pred.shape[-1] == 1:
-                        pred = pred.squeeze(-1)
-
-                    loss = loss_fn(
-                        pred,
-                        y_batch
-                    )
-
-                # --------------------------------------------
-                # NaN / Inf protection
-                # --------------------------------------------
-
-                if not torch.isfinite(loss):
-                    print("Invalid loss detected")
-                    continue
-
-                # --------------------------------------------
-                # Backward
-                # --------------------------------------------
-
-                scaler.scale(loss).backward()
-
-                scaler.unscale_(optimizer)
-
-                torch.nn.utils.clip_grad_norm_(
-                    model.parameters(),
-                    max_norm=1.0
+                loss = loss_fn(
+                    pred,
+                    y
                 )
 
-                scaler.step(optimizer)
+            if not torch.isfinite(loss):
+                print(
+                    "Invalid loss detected"
+                )
+                continue
 
-                scaler.update()
+            scaler.scale(loss).backward()
 
-                train_loss += loss.item()
-                train_steps += 1
+            scaler.unscale_(optimizer)
 
-        # ----------------------------------------------------
-        # Average train loss
-        # ----------------------------------------------------
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(),
+                max_norm=1.0
+            )
 
-        train_loss /= max(train_steps, 1)
+            scaler.step(optimizer)
+            scaler.update()
+
+            train_loss += loss.item()
+            train_steps += 1
+
+        train_loss /= max(
+            train_steps,
+            1
+        )
 
         # ====================================================
         # VALIDATION
@@ -205,7 +178,10 @@ def train_model(
                 u = u.float()
                 y = y.float()
 
-                if y.ndim == 3 and y.shape[-1] == 1:
+                if (
+                    y.ndim == 3
+                    and y.shape[-1] == 1
+                ):
                     y = y.squeeze(-1)
 
                 if u.ndim == 2:
@@ -214,59 +190,50 @@ def train_model(
                 if y.ndim == 1:
                     y = y.unsqueeze(0)
 
-                seq_total = u.shape[1]
+                u = u.to(
+                    device,
+                    non_blocking=True
+                )
 
-                # --------------------------------------------
-                # Validate ALL chunks
-                # --------------------------------------------
+                y = y.to(
+                    device,
+                    non_blocking=True
+                )
 
-                for i in range(0, seq_total, seq_len):
+                with autocast(
+                    device_type=device.type,
+                    enabled=device.type == "cuda"
+                ):
 
-                    u_batch = (
-                        u[:, i:i + seq_len]
-                        .to(device, non_blocking=True)
-                    )
+                    pred = model(u)
 
-                    y_batch = (
-                        y[:, i:i + seq_len]
-                        .to(device, non_blocking=True)
-                    )
-
-                    with autocast(
-                        device_type=device.type,
-                        enabled=device.type == "cuda"
+                    if (
+                        pred.ndim == 3
+                        and pred.shape[-1] == 1
                     ):
+                        pred = pred.squeeze(-1)
 
-                        pred = model(u_batch)
+                    loss = loss_fn(
+                        pred,
+                        y
+                    )
 
-                        if (
-                            pred.ndim == 3
-                            and pred.shape[-1] == 1
-                        ):
-                            pred = pred.squeeze(-1)
+                valid_loss += loss.item()
+                valid_steps += 1
 
-                        loss = loss_fn(
-                            pred,
-                            y_batch
-                        )
-
-                    valid_loss += loss.item()
-                    valid_steps += 1
-
-        # ----------------------------------------------------
-        # Average validation loss
-        # ----------------------------------------------------
-
-        valid_loss /= max(valid_steps, 1)
+        valid_loss /= max(
+            valid_steps,
+            1
+        )
 
         # ====================================================
-        # Scheduler step
+        # Scheduler
         # ====================================================
 
         scheduler.step()
 
         # ====================================================
-        # Save best checkpoint
+        # Save best model
         # ====================================================
 
         if valid_loss < best_valid_loss:
@@ -295,7 +262,9 @@ def train_model(
         # Logging
         # ====================================================
 
-        current_lr = optimizer.param_groups[0]["lr"]
+        current_lr = (
+            optimizer.param_groups[0]["lr"]
+        )
 
         print(
             f"Epoch {epoch + 1} | "
