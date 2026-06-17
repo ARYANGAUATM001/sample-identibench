@@ -58,35 +58,24 @@ This will:
 ### 🔹 1. Mamba
 
 1. Lightweight baseline implementation
-2. Fast training
-3. Stable across repetitions
-4. Efficient for simpler dynamics
+
 
 
 
 ### 🔹 2. Mamba2
 
 1. Improved optimization and representation
-2. Better accuracy on nonlinear systems
-3. Lower benchmark error
-4. Faster inference
+
 
 
 ###  3. Mamba3
 
 1. Larger and more expressive variant
-2. Higher computational cost
-3. Stronger modeling capability
-4. More complex dynamics handling
+
 
 ---
 
-## 📊 Results and Comparison
 
-Each benchmark is repeated **2 times** to ensure reliable results.
-Metrics are reported as **mean ± standard deviation**.
-
----
 
 
 
@@ -102,7 +91,6 @@ Metrics are reported as **mean ± standard deviation**.
 ![Mamba3 Results](utils/output3.png)
 
 
-## 🆚 Model Comparison
 
 
 # 🆚 Model Comparison
@@ -113,19 +101,16 @@ Metrics are reported as **mean ± standard deviation**.
 
 - Achieved the best overall benchmark performance
 - Lower RMSE across nonlinear system benchmarks
-- Better temporal sequence modeling capability
+
 
 ### Mamba
 
 - Reliable baseline performance
-- Performs well on moderate nonlinear dynamics
-- Lower complexity and easier optimization
+
 
 ### Mamba3
 
 - Higher model capacity
-- Handles more complex representations
-- Increased benchmark error in current experiments
 
 
 ---
@@ -173,22 +158,7 @@ Metrics are reported as **mean ± standard deviation**.
 
 
 
-# 📌 Key Takeaways
 
-- Mamba2 achieved the best overall balance between:
-  - prediction accuracy
-  - training efficiency
-  - stability
-
-- Mamba1 provides:
-  - strong baseline performance
-  - faster experimentation
-  - lower computational requirements
-
-- Mamba3 demonstrates:
-  - larger representational capacity
-  - higher computational complexity
-  - need for further optimization
 
 ---
 
