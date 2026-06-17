@@ -9,26 +9,40 @@ class Model(nn.Module):
     def __init__(
         self,
         input_dim=1,
-        d_model=64,
+        d_model=128,
+        d_state=64,
+        n_layers=4,
         num_classes=1
     ):
 
         super().__init__()
 
+        # ----------------------------------------
+        # u + previous y
+        # ----------------------------------------
+
         self.input_proj = nn.Linear(
-            input_dim,
+            input_dim + 1,
             d_model
         )
 
-        self.norm = nn.LayerNorm(
-            d_model
+        self.layers = nn.ModuleList(
+            [
+                Mamba(
+                    d_model=d_model,
+                    d_state=d_state,
+                    d_conv=4,
+                    expand=2
+                )
+                for _ in range(n_layers)
+            ]
         )
 
-        self.mamba = Mamba(
-            d_model=d_model,
-            d_state=16,
-            d_conv=4,
-            expand=2,
+        self.norms = nn.ModuleList(
+            [
+                nn.LayerNorm(d_model)
+                for _ in range(n_layers)
+            ]
         )
 
         self.head = nn.Linear(
@@ -36,24 +50,35 @@ class Model(nn.Module):
             num_classes
         )
 
-    def forward(self, x):
+    def forward(
+        self,
+        u,
+        y_prev
+    ):
+        """
+        u       : (B,L,input_dim)
+        y_prev  : (B,L)
+        """
 
-        # (B, L, input_dim)
+        if y_prev.ndim == 2:
+            y_prev = y_prev.unsqueeze(-1)
+
+        x = torch.cat(
+            [u, y_prev],
+            dim=-1
+        )
+
         x = self.input_proj(x)
 
-        # residual branch
-        residual = x
+        for norm, layer in zip(
+            self.norms,
+            self.layers
+        ):
+            residual = x
+            x = norm(x)
+            x = layer(x)
+            x = x + residual
 
-        # pre-norm
-        x = self.norm(x)
-
-        # mamba block
-        x = self.mamba(x)
-
-        # residual connection
-        x = x + residual
-
-        # prediction head
         x = self.head(x)
 
         return x.squeeze(-1)
