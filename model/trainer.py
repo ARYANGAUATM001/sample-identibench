@@ -14,18 +14,10 @@ def train_model(
     model_name="mamba1"
 ):
 
-    # ========================================================
-    # Device
-    # ========================================================
-
     model = model.to(device)
 
     if config.get("compile", False):
         model = torch.compile(model)
-
-    # ========================================================
-    # Optimizer
-    # ========================================================
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -35,10 +27,6 @@ def train_model(
             1e-2
         )
     )
-
-    # ========================================================
-    # Scheduler
-    # ========================================================
 
     scheduler = torch.optim.lr_scheduler.SequentialLR(
         optimizer,
@@ -59,23 +47,11 @@ def train_model(
         milestones=[5]
     )
 
-    # ========================================================
-    # Loss
-    # ========================================================
-
     loss_fn = nn.MSELoss()
-
-    # ========================================================
-    # AMP
-    # ========================================================
 
     scaler = GradScaler(
         enabled=device.type == "cuda"
     )
-
-    # ========================================================
-    # Checkpointing
-    # ========================================================
 
     save_dir = f"outputs/{model_name}"
 
@@ -85,10 +61,6 @@ def train_model(
     )
 
     best_valid_loss = float("inf")
-
-    # ========================================================
-    # Epoch loop
-    # ========================================================
 
     for epoch in range(config["epochs"]):
 
@@ -118,12 +90,18 @@ def train_model(
             if y.ndim == 1:
                 y = y.unsqueeze(0)
 
-            u = u.to(
-                device,
-                non_blocking=True
-            )
+            # ----------------------------------------------
+            # Teacher forcing input
+            # y_prev[t] = y[t-1]
+            # ----------------------------------------------
 
-            y = y.to(
+            y_prev = torch.zeros_like(y)
+
+            y_prev[:, 1:] = y[:, :-1]
+
+            u = u.to(device, non_blocking=True)
+            y = y.to(device, non_blocking=True)
+            y_prev = y_prev.to(
                 device,
                 non_blocking=True
             )
@@ -137,13 +115,10 @@ def train_model(
                 enabled=device.type == "cuda"
             ):
 
-                pred = model(u)
-
-                if (
-                    pred.ndim == 3
-                    and pred.shape[-1] == 1
-                ):
-                    pred = pred.squeeze(-1)
+                pred = model(
+                    u,
+                    y_prev
+                )
 
                 loss = loss_fn(
                     pred,
@@ -151,9 +126,6 @@ def train_model(
                 )
 
             if not torch.isfinite(loss):
-                print(
-                    "Invalid loss detected"
-                )
                 continue
 
             scaler.scale(loss).backward()
@@ -204,6 +176,10 @@ def train_model(
                 if y.ndim == 1:
                     y = y.unsqueeze(0)
 
+                y_prev = torch.zeros_like(y)
+
+                y_prev[:, 1:] = y[:, :-1]
+
                 u = u.to(
                     device,
                     non_blocking=True
@@ -214,18 +190,20 @@ def train_model(
                     non_blocking=True
                 )
 
+                y_prev = y_prev.to(
+                    device,
+                    non_blocking=True
+                )
+
                 with autocast(
                     device_type=device.type,
                     enabled=device.type == "cuda"
                 ):
 
-                    pred = model(u)
-
-                    if (
-                        pred.ndim == 3
-                        and pred.shape[-1] == 1
-                    ):
-                        pred = pred.squeeze(-1)
+                    pred = model(
+                        u,
+                        y_prev
+                    )
 
                     loss = loss_fn(
                         pred,
@@ -240,15 +218,7 @@ def train_model(
             1
         )
 
-        # ====================================================
-        # Scheduler
-        # ====================================================
-
         scheduler.step()
-
-        # ====================================================
-        # Save best model
-        # ====================================================
 
         if valid_loss < best_valid_loss:
 
@@ -271,10 +241,6 @@ def train_model(
                 },
                 f"{save_dir}/best_model.pt"
             )
-
-        # ====================================================
-        # Logging
-        # ====================================================
 
         current_lr = (
             optimizer.param_groups[0]["lr"]
