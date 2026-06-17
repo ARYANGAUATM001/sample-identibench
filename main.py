@@ -117,7 +117,7 @@ def build_model(context):
             u,
             y,
             init_window
-        ) + (x,)
+        )
 
         for (u, y, x)
         in valid_data
@@ -170,12 +170,7 @@ def build_model(context):
         f"outputs/{args.model}/best_model.pt"
     )
 
-    if os.path.exists(ckpt_path):
-
-        checkpoint = torch.load(
-            ckpt_path,
-            map_location=device
-        )
+    if os.path.exists(ckpt_pa
 
         model.load_state_dict(
             checkpoint["model_state_dict"]
@@ -211,10 +206,7 @@ def build_model(context):
 
                 seq_len = u_test.shape[0]
 
-                # ----------------------------------------
-                # Initialize from benchmark warmup
-                # ----------------------------------------
-
+                
                 if y_init is None:
 
                     prev_y = torch.zeros(
